@@ -1,9 +1,9 @@
-// Package repository implements data access layer.
 package repository
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"wishlist-api/internal/models"
 
 	"github.com/jackc/pgx/v5"
@@ -28,7 +28,7 @@ func (r *UserPostgres) Create(ctx context.Context, email, passwordHash string) (
 		email, passwordHash,
 	).Scan(&user.ID, &user.Email, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert user: %w", err)
 	}
 	return &user, nil
 }
@@ -44,7 +44,7 @@ func (r *UserPostgres) GetByEmail(ctx context.Context, email string) (*models.Us
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("get user by email: %w", err)
 	}
 	return user, nil
 }

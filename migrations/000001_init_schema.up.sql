@@ -1,33 +1,35 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE users (
-                       id SERIAL PRIMARY KEY,
-                       email VARCHAR(255) UNIQUE NOT NULL,
-                       password_hash VARCHAR(255) NOT NULL,
-                       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                       email TEXT NOT NULL UNIQUE,
+                       password_hash TEXT NOT NULL,
+                       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE wishlists (
-                           id SERIAL PRIMARY KEY,
-                           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                           title VARCHAR(255) NOT NULL,
-                           description TEXT,
+                           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                           user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                           title TEXT NOT NULL,
+                           description TEXT NOT NULL DEFAULT '',
                            event_date DATE NOT NULL,
                            access_token UUID NOT NULL DEFAULT gen_random_uuid(),
-                           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                            UNIQUE(access_token)
 );
 
 CREATE TABLE items (
-                       id SERIAL PRIMARY KEY,
-                       wishlist_id INTEGER NOT NULL REFERENCES wishlists(id) ON DELETE CASCADE,
-                       title VARCHAR(255) NOT NULL,
-                       description TEXT,
-                       product_link VARCHAR(512),
-                       priority INTEGER NOT NULL DEFAULT 0,
+                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                       wishlist_id UUID NOT NULL REFERENCES wishlists(id) ON DELETE CASCADE,
+                       title TEXT NOT NULL,
+                       description TEXT NOT NULL DEFAULT '',
+                       product_link TEXT NOT NULL DEFAULT '',
+                       priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
                        is_booked BOOLEAN NOT NULL DEFAULT FALSE,
-                       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_wishlists_user_id ON wishlists(user_id);

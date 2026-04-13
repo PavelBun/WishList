@@ -11,22 +11,17 @@ import (
 	"wishlist-api/pkg/hash"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // Domain errors.
 var (
-	// ErrNotFound is returned when a requested resource does not exist.
-	ErrNotFound = errors.New("resource not found")
-	// ErrForbidden is returned when access to a resource is denied.
-	ErrForbidden = errors.New("access denied")
-	// ErrAlreadyBooked is returned when trying to book an already booked item.
-	ErrAlreadyBooked = errors.New("item already booked")
-	// ErrInvalidInput is returned when input validation fails.
-	ErrInvalidInput = errors.New("invalid input")
-	// ErrInvalidCredentials is returned when email or password is incorrect.
+	ErrNotFound           = errors.New("resource not found")
+	ErrForbidden          = errors.New("access denied")
+	ErrAlreadyBooked      = errors.New("item already booked")
+	ErrInvalidInput       = errors.New("invalid input")
 	ErrInvalidCredentials = errors.New("invalid email or password")
-	// ErrUserExists is returned when trying to register an existing user.
-	ErrUserExists = errors.New("user already exists")
+	ErrUserExists         = errors.New("user already exists")
 )
 
 // AuthService handles authentication logic.
@@ -56,9 +51,13 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 	}
 	passwordHash, err := hash.Password(password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
-	return s.userRepo.Create(ctx, email, passwordHash)
+	user, err := s.userRepo.Create(ctx, email, passwordHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+	return user, nil
 }
 
 // Login authenticates a user and returns a JWT token.
@@ -71,28 +70,36 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		return "", ErrInvalidCredentials
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
+		"user_id": user.ID.String(),
 		"email":   user.Email,
 		"exp":     time.Now().Add(s.jwtExpiry).Unix(),
 	})
-	return token.SignedString([]byte(s.jwtSecret))
+	signed, err := token.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+	return signed, nil
 }
 
 // ValidateToken parses and validates a JWT token, returning the user ID.
-func (s *AuthService) ValidateToken(tokenString string) (int, error) {
+func (s *AuthService) ValidateToken(tokenString string) (uuid.UUID, error) {
 	token, err := jwt.Parse(tokenString, func(_ *jwt.Token) (interface{}, error) {
 		return []byte(s.jwtSecret), nil
 	})
 	if err != nil || !token.Valid {
-		return 0, ErrInvalidCredentials
+		return uuid.Nil, ErrInvalidCredentials
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return 0, ErrInvalidCredentials
+		return uuid.Nil, ErrInvalidCredentials
 	}
-	userID, ok := claims["user_id"].(float64)
+	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
-		return 0, ErrInvalidCredentials
+		return uuid.Nil, ErrInvalidCredentials
 	}
-	return int(userID), nil
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil, ErrInvalidCredentials
+	}
+	return userID, nil
 }

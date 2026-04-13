@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"wishlist-api/internal/service"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +25,8 @@ func NewPublicHandler(wishlistService *service.WishlistService, itemService *ser
 // @Produce json
 // @Param token path string true "Access token (UUID)"
 // @Success 200 {object} models.Wishlist
+// @Failure 400 {string} string "Invalid token format"
+// @Failure 404 {string} string "Wishlist not found"
 // @Router /public/wishlists/{token} [get]
 func (h *PublicHandler) GetWishlistByToken(w http.ResponseWriter, r *http.Request) {
 	tokenStr := chi.URLParam(r, "token")
@@ -52,9 +53,11 @@ func (h *PublicHandler) GetWishlistByToken(w http.ResponseWriter, r *http.Reques
 // @Summary Book an item in public wishlist
 // @Tags public
 // @Param token path string true "Access token (UUID)"
-// @Param item_id path int true "Item ID"
-// @Success 200 {string} string "booked"
-// @Failure 409 {string} string "item already booked"
+// @Param item_id path string true "Item ID (UUID)"
+// @Success 204 "No Content"
+// @Failure 400 {string} string "Invalid token or item ID"
+// @Failure 404 {string} string "Wishlist or item not found"
+// @Failure 409 {string} string "Item already booked"
 // @Router /public/wishlists/{token}/items/{item_id}/book [post]
 func (h *PublicHandler) BookItem(w http.ResponseWriter, r *http.Request) {
 	tokenStr := chi.URLParam(r, "token")
@@ -64,22 +67,19 @@ func (h *PublicHandler) BookItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	itemIDStr := chi.URLParam(r, "item_id")
-	itemID, err := strconv.Atoi(itemIDStr)
+	itemID, err := uuid.Parse(itemIDStr)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
-
 	wishlist, err := h.wishlistService.GetByAccessToken(r.Context(), token)
 	if err != nil {
 		writeSafeError(w, r, err)
 		return
 	}
-
-	err = h.itemService.BookItem(r.Context(), itemID, wishlist.ID)
-	if err != nil {
+	if err := h.itemService.BookItem(r.Context(), itemID, wishlist.ID); err != nil {
 		writeSafeError(w, r, err)
 		return
 	}
-	writeJSONSuccess(w, map[string]string{"status": "booked"})
+	w.WriteHeader(http.StatusNoContent)
 }

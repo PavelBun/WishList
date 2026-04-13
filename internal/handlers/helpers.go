@@ -32,10 +32,10 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 
 func decodeAndValidate(r *http.Request, dst interface{}) error {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		return fmt.Errorf("invalid request body")
+		return fmt.Errorf("invalid request body: %w", err)
 	}
 	if err := validator.Validate(dst); err != nil {
-		return err
+		return fmt.Errorf("validation failed: %w", err)
 	}
 	return nil
 }

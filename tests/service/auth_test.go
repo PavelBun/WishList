@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 	"time"
-
 	"wishlist-api/internal/models"
 	"wishlist-api/internal/service"
 	"wishlist-api/pkg/hash"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,7 +32,7 @@ func TestAuthService_Register(t *testing.T) {
 		},
 		createFunc: func(_ context.Context, email, _ string) (*models.User, error) {
 			return &models.User{
-				ID:        1,
+				ID:        uuid.New(), // было 1
 				Email:     email,
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
@@ -52,7 +52,7 @@ func TestAuthService_Login(t *testing.T) {
 	repo := &mockUserRepo{
 		getByEmailFunc: func(_ context.Context, _ string) (*models.User, error) {
 			return &models.User{
-				ID:           1,
+				ID:           uuid.New(), // было 1
 				Email:        "test@example.com",
 				PasswordHash: hashed,
 			}, nil

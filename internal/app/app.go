@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -38,42 +39,94 @@ type App struct {
 
 // New creates and configures a new App instance.
 func New(ctx context.Context, cfg *config.Config) (*App, error) {
-	pool, err := db.NewPostgresPool(ctx,
-		cfg.DBHost,
-		cfg.DBPort,
-		cfg.DBUser,
-		cfg.DBPassword,
-		cfg.DBName,
-	)
+	pool, err := createDBPool(ctx, cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create db pool: %w", err)
 	}
 
-	userRepo := repository.NewUserRepository(pool)
-	wishlistRepo := repository.NewWishlistRepository(pool)
-	itemRepo := repository.NewItemRepository(pool)
+	repos := initRepositories(pool)
+	services := initServices(repos, cfg)
+	router := initRouter(services)
 
-	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
-	wishlistService := service.NewWishlistService(wishlistRepo)
-	itemService := service.NewItemService(itemRepo, wishlistRepo)
+	server := &http.Server{
+		Addr:    ":" + cfg.AppPort,
+		Handler: router,
+	}
 
-	authHandler := handlers.NewAuthHandler(authService)
-	wishlistHandler := handlers.NewWishlistHandler(wishlistService)
-	itemHandler := handlers.NewItemHandler(itemService)
-	publicHandler := handlers.NewPublicHandler(wishlistService, itemService)
+	return &App{
+		cfg:    cfg,
+		dbPool: pool,
+		router: router,
+		server: server,
+	}, nil
+}
+
+// createDBPool establishes connection to PostgreSQL.
+func createDBPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
+	pool, err := db.NewPostgresPool(ctx, cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
+	}
+	return pool, nil
+}
+
+// repositories groups all repository instances.
+type repositories struct {
+	user     *repository.UserPostgres
+	wishlist *repository.WishlistPostgres
+	item     *repository.ItemPostgres
+}
+
+// initRepositories creates repository instances.
+func initRepositories(pool *pgxpool.Pool) *repositories {
+	return &repositories{
+		user:     repository.NewUserRepository(pool),
+		wishlist: repository.NewWishlistRepository(pool),
+		item:     repository.NewItemRepository(pool),
+	}
+}
+
+// services groups all service instances.
+type services struct {
+	auth     *service.AuthService
+	wishlist *service.WishlistService
+	item     *service.ItemService
+}
+
+// initServices creates service instances.
+func initServices(repos *repositories, cfg *config.Config) *services {
+	authSvc := service.NewAuthService(repos.user, cfg.JWTSecret, cfg.JWTExpiryHours)
+	wishlistSvc := service.NewWishlistService(repos.wishlist)
+	itemSvc := service.NewItemService(repos.item, repos.wishlist)
+
+	return &services{
+		auth:     authSvc,
+		wishlist: wishlistSvc,
+		item:     itemSvc,
+	}
+}
+
+// initRouter configures HTTP routes and middleware.
+func initRouter(svc *services) *chi.Mux {
+	authHandler := handlers.NewAuthHandler(svc.auth)
+	wishlistHandler := handlers.NewWishlistHandler(svc.wishlist)
+	itemHandler := handlers.NewItemHandler(svc.item)
+	publicHandler := handlers.NewPublicHandler(svc.wishlist, svc.item)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestIDMiddleware)
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 
+	// Public routes
 	r.Post("/auth/register", authHandler.Register)
 	r.Post("/auth/login", authHandler.Login)
 	r.Get("/public/wishlists/{token}", publicHandler.GetWishlistByToken)
 	r.Post("/public/wishlists/{token}/items/{item_id}/book", publicHandler.BookItem)
 
+	// Protected routes
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddleware(authService))
+		r.Use(middleware.AuthMiddleware(svc.auth))
 		r.Route("/wishlists", func(r chi.Router) {
 			r.Post("/", wishlistHandler.Create)
 			r.Get("/", wishlistHandler.GetAll)
@@ -82,26 +135,18 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 			r.Delete("/{id}", wishlistHandler.Delete)
 			r.Post("/{wishlist_id}/items", itemHandler.Create)
 			r.Get("/{wishlist_id}/items", itemHandler.GetAll)
+			r.Get("/items/{id}", itemHandler.GetByID)
 		})
 		r.Put("/items/{id}", itemHandler.Update)
 		r.Delete("/items/{id}", itemHandler.Delete)
 	})
 
+	// Swagger
 	r.Get("/swagger/*", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
 	))
 
-	server := &http.Server{
-		Addr:    ":" + cfg.AppPort,
-		Handler: r,
-	}
-
-	return &App{
-		cfg:    cfg,
-		dbPool: pool,
-		router: r,
-		server: server,
-	}, nil
+	return r
 }
 
 // Run starts the HTTP server and handles graceful shutdown.

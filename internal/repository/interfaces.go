@@ -17,20 +17,20 @@ type UserRepository interface {
 
 // WishlistRepository defines methods for wishlist persistence.
 type WishlistRepository interface {
-	Create(ctx context.Context, userID int, title, description string, eventDate time.Time) (*models.Wishlist, error)
-	GetByID(ctx context.Context, id int) (*models.Wishlist, error)
+	Create(ctx context.Context, userID uuid.UUID, title, description string, eventDate time.Time) (*models.Wishlist, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Wishlist, error)
 	GetByAccessToken(ctx context.Context, token uuid.UUID) (*models.Wishlist, error)
-	GetAllByUser(ctx context.Context, userID int) ([]models.Wishlist, error)
+	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]models.Wishlist, error)
 	Update(ctx context.Context, w *models.Wishlist) error
-	Delete(ctx context.Context, id int) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // ItemRepository defines methods for item persistence.
 type ItemRepository interface {
 	Create(ctx context.Context, item *models.Item) error
-	GetByID(ctx context.Context, id int) (*models.Item, error)
-	GetAllByWishlistID(ctx context.Context, wishlistID int) ([]models.Item, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Item, error)
+	GetAllByWishlistID(ctx context.Context, wishlistID uuid.UUID) ([]models.Item, error)
 	Update(ctx context.Context, item *models.Item) error
-	Delete(ctx context.Context, id int) error
-	BookItem(ctx context.Context, id int) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	BookItem(ctx context.Context, id uuid.UUID) error
 }

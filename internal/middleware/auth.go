@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"wishlist-api/internal/service"
@@ -30,7 +31,7 @@ func AuthMiddleware(authService *service.AuthService) func(http.Handler) http.Ha
 			token := parts[1]
 			userID, err := authService.ValidateToken(token)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				http.Error(w, fmt.Sprintf("Invalid token: %v", err), http.StatusUnauthorized)
 				return
 			}
 			ctx := context.WithValue(r.Context(), UserIDKey, userID)

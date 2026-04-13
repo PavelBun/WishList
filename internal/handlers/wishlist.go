@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"wishlist-api/internal/dto"
 	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/service"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // WishlistHandler handles wishlist-related endpoints.
@@ -32,7 +32,7 @@ func NewWishlistHandler(wishlistService *service.WishlistService) *WishlistHandl
 // @Failure 401 {string} string
 // @Router /wishlists [post]
 func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(int)
+	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	var req dto.CreateWishlistRequest
 	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -55,7 +55,7 @@ func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {string} string
 // @Router /wishlists [get]
 func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(int)
+	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	wishlists, err := h.wishlistService.GetAllByUser(r.Context(), userID)
 	if err != nil {
 		writeSafeError(w, r, err)
@@ -74,9 +74,9 @@ func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {string} string
 // @Router /wishlists/{id} [get]
 func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(int)
+	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid ID")
 		return
@@ -101,9 +101,9 @@ func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,404,401 {string} string
 // @Router /wishlists/{id} [put]
 func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(int)
+	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid ID")
 		return
@@ -117,7 +117,8 @@ func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeSafeError(w, r, err)
 		return
 	}
-	writeJSONSuccess(w, map[string]string{"status": "updated"})
+	updated, _ := h.wishlistService.GetByID(r.Context(), id, userID)
+	writeJSONSuccess(w, updated)
 }
 
 // Delete godoc
@@ -129,9 +130,9 @@ func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,404,401 {string} string
 // @Router /wishlists/{id} [delete]
 func (h *WishlistHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(int)
+	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid ID")
 		return
@@ -140,5 +141,5 @@ func (h *WishlistHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeSafeError(w, r, err)
 		return
 	}
-	writeJSONSuccess(w, map[string]string{"status": "deleted"})
+	w.WriteHeader(http.StatusNoContent)
 }

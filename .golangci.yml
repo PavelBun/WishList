@@ -10,6 +10,10 @@ linters:
     - revive
     - misspell
     - unconvert
+    - cyclop
+    - funlen
+    - gocognit
+    - wrapcheck
 
 formatters:
   enable:
@@ -26,8 +30,10 @@ settings:
       - all
       - -ST1000
       - -ST1003
-  misspell:
-    locale: US
+  cyclop:
+    max-complexity: 30
+  funlen:
+    lines: 90
 
 issues:
   exclude-dirs:

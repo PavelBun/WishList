@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 	"wishlist-api/internal/models"
 
@@ -22,7 +23,7 @@ func NewWishlistRepository(pool *pgxpool.Pool) *WishlistPostgres {
 }
 
 // Create inserts a new wishlist into the database.
-func (r *WishlistPostgres) Create(ctx context.Context, userID int, title, description string, eventDate time.Time) (*models.Wishlist, error) {
+func (r *WishlistPostgres) Create(ctx context.Context, userID uuid.UUID, title, description string, eventDate time.Time) (*models.Wishlist, error) {
 	var w models.Wishlist
 	err := r.pool.QueryRow(ctx,
 		`INSERT INTO wishlists (user_id, title, description, event_date) 
@@ -31,13 +32,13 @@ func (r *WishlistPostgres) Create(ctx context.Context, userID int, title, descri
 		userID, title, description, eventDate,
 	).Scan(&w.ID, &w.UserID, &w.Title, &w.Description, &w.EventDate, &w.AccessToken, &w.CreatedAt, &w.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert wishlist: %w", err)
 	}
 	return &w, nil
 }
 
 // GetByID retrieves a wishlist by its ID.
-func (r *WishlistPostgres) GetByID(ctx context.Context, id int) (*models.Wishlist, error) {
+func (r *WishlistPostgres) GetByID(ctx context.Context, id uuid.UUID) (*models.Wishlist, error) {
 	w := &models.Wishlist{}
 	err := r.pool.QueryRow(ctx,
 		`SELECT id, user_id, title, description, event_date, access_token, created_at, updated_at 
@@ -48,7 +49,7 @@ func (r *WishlistPostgres) GetByID(ctx context.Context, id int) (*models.Wishlis
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("get wishlist by id: %w", err)
 	}
 	return w, nil
 }
@@ -65,20 +66,20 @@ func (r *WishlistPostgres) GetByAccessToken(ctx context.Context, token uuid.UUID
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("get wishlist by token: %w", err)
 	}
 	return w, nil
 }
 
 // GetAllByUser returns all wishlists belonging to the given user.
-func (r *WishlistPostgres) GetAllByUser(ctx context.Context, userID int) ([]models.Wishlist, error) {
+func (r *WishlistPostgres) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]models.Wishlist, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, user_id, title, description, event_date, access_token, created_at, updated_at 
          FROM wishlists WHERE user_id = $1 ORDER BY event_date DESC`,
 		userID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query wishlists by user: %w", err)
 	}
 	defer rows.Close()
 
@@ -87,12 +88,12 @@ func (r *WishlistPostgres) GetAllByUser(ctx context.Context, userID int) ([]mode
 		var w models.Wishlist
 		err := rows.Scan(&w.ID, &w.UserID, &w.Title, &w.Description, &w.EventDate, &w.AccessToken, &w.CreatedAt, &w.UpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan wishlist row: %w", err)
 		}
 		wishlists = append(wishlists, w)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("rows iteration: %w", err)
 	}
 	return wishlists, nil
 }
@@ -104,11 +105,17 @@ func (r *WishlistPostgres) Update(ctx context.Context, w *models.Wishlist) error
          WHERE id = $4`,
 		w.Title, w.Description, w.EventDate, w.ID,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("update wishlist: %w", err)
+	}
+	return nil
 }
 
 // Delete removes a wishlist by ID.
-func (r *WishlistPostgres) Delete(ctx context.Context, id int) error {
+func (r *WishlistPostgres) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.pool.Exec(ctx, "DELETE FROM wishlists WHERE id = $1", id)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete wishlist: %w", err)
+	}
+	return nil
 }

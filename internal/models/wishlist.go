@@ -8,8 +8,8 @@ import (
 
 // Wishlist represents a user's wishlist for an event.
 type Wishlist struct {
-	ID          int       `json:"id"`
-	UserID      int       `json:"user_id"`
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
 	EventDate   time.Time `json:"event_date"`

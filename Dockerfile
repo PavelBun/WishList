@@ -1,20 +1,15 @@
-FROM golang:1.25-alpine AS builder
-
+FROM golang:1.25.1-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /wishlist-api ./cmd/server
+RUN go build -o /wishlist-api ./cmd/server
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /root/
-COPY --from=builder /wishlist-api .
-
-# По умолчанию порт 8080, но можно переопределить через ENV
-ENV APP_PORT=8080
-EXPOSE ${APP_PORT}
-
-CMD ["sh", "-c", "./wishlist-api"]
+FROM alpine:3.18
+RUN adduser -D -u 1000 appuser
+WORKDIR /app
+COPY --from=builder /wishlist-api /app/
+COPY migrations /app/migrations
+USER appuser
+EXPOSE 8080
+CMD ["./wishlist-api"]

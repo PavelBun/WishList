@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"wishlist-api/internal/models"
 	"wishlist-api/internal/repository"
+
+	"github.com/google/uuid"
 )
 
 // ItemService handles wishlist item operations.
@@ -22,12 +25,15 @@ func NewItemService(itemRepo repository.ItemRepository, wishlistRepo repository.
 }
 
 // Create adds a new item to a wishlist.
-func (s *ItemService) Create(ctx context.Context, wishlistID, userID int, title, description, productLink string, priority int) (*models.Item, error) {
-	if priority < 1 || priority > 5 {
+func (s *ItemService) Create(ctx context.Context, wishlistID, userID uuid.UUID, title, description, productLink string, priority models.Priority) (*models.Item, error) {
+	if !priority.Valid() {
 		return nil, ErrInvalidInput
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, wishlistID)
-	if err != nil || w == nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to get wishlist for item creation: %w", err)
+	}
+	if w == nil {
 		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
@@ -40,21 +46,26 @@ func (s *ItemService) Create(ctx context.Context, wishlistID, userID int, title,
 		ProductLink: productLink,
 		Priority:    priority,
 	}
-	err = s.itemRepo.Create(ctx, item)
-	if err != nil {
-		return nil, err
+	if err := s.itemRepo.Create(ctx, item); err != nil {
+		return nil, fmt.Errorf("failed to create item: %w", err)
 	}
 	return item, nil
 }
 
 // GetByID returns an item by ID, checking user ownership.
-func (s *ItemService) GetByID(ctx context.Context, id, userID int) (*models.Item, error) {
+func (s *ItemService) GetByID(ctx context.Context, id, userID uuid.UUID) (*models.Item, error) {
 	item, err := s.itemRepo.GetByID(ctx, id)
-	if err != nil || item == nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to get item: %w", err)
+	}
+	if item == nil {
 		return nil, ErrNotFound
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
-	if err != nil || w == nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to get wishlist for item: %w", err)
+	}
+	if w == nil {
 		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
@@ -64,24 +75,38 @@ func (s *ItemService) GetByID(ctx context.Context, id, userID int) (*models.Item
 }
 
 // GetAllByWishlistID returns all items of a wishlist, checking user ownership.
-func (s *ItemService) GetAllByWishlistID(ctx context.Context, wishlistID, userID int) ([]models.Item, error) {
+func (s *ItemService) GetAllByWishlistID(ctx context.Context, wishlistID, userID uuid.UUID) ([]models.Item, error) {
 	w, err := s.wishlistRepo.GetByID(ctx, wishlistID)
-	if err != nil || w == nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to get wishlist for items listing: %w", err)
+	}
+	if w == nil {
 		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
 		return nil, ErrForbidden
 	}
-	return s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
+	items, err := s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list items: %w", err)
+	}
+	return items, nil
 }
 
 // GetAllPublicByWishlistID returns all items of a wishlist without auth checks.
-func (s *ItemService) GetAllPublicByWishlistID(ctx context.Context, wishlistID int) ([]models.Item, error) {
-	return s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
+func (s *ItemService) GetAllPublicByWishlistID(ctx context.Context, wishlistID uuid.UUID) ([]models.Item, error) {
+	items, err := s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list public items: %w", err)
+	}
+	return items, nil
 }
 
 // Update modifies an existing item.
-func (s *ItemService) Update(ctx context.Context, id, userID int, title *string, description *string, productLink *string, priority *int) error {
+func (s *ItemService) Update(ctx context.Context, id, userID uuid.UUID, title *string, description *string, productLink *string, priority *models.Priority) error {
+	if priority != nil && !priority.Valid() {
+		return ErrInvalidInput
+	}
 	item, _, err := s.getItemAndVerifyAccess(ctx, id, userID)
 	if err != nil {
 		return err
@@ -98,22 +123,31 @@ func (s *ItemService) Update(ctx context.Context, id, userID int, title *string,
 	if priority != nil {
 		item.Priority = *priority
 	}
-	return s.itemRepo.Update(ctx, item)
+	if err := s.itemRepo.Update(ctx, item); err != nil {
+		return fmt.Errorf("failed to update item: %w", err)
+	}
+	return nil
 }
 
 // Delete removes an item.
-func (s *ItemService) Delete(ctx context.Context, id, userID int) error {
+func (s *ItemService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	_, _, err := s.getItemAndVerifyAccess(ctx, id, userID)
 	if err != nil {
 		return err
 	}
-	return s.itemRepo.Delete(ctx, id)
+	if err := s.itemRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete item: %w", err)
+	}
+	return nil
 }
 
 // BookItem marks an item as booked. Returns ErrAlreadyBooked if already booked.
-func (s *ItemService) BookItem(ctx context.Context, id int, wishlistID int) error {
+func (s *ItemService) BookItem(ctx context.Context, id, wishlistID uuid.UUID) error {
 	item, err := s.itemRepo.GetByID(ctx, id)
-	if err != nil || item == nil {
+	if err != nil {
+		return fmt.Errorf("failed to get item for booking: %w", err)
+	}
+	if item == nil {
 		return ErrNotFound
 	}
 	if item.WishlistID != wishlistID {
@@ -123,17 +157,26 @@ func (s *ItemService) BookItem(ctx context.Context, id int, wishlistID int) erro
 	if errors.Is(err, repository.ErrAlreadyBooked) {
 		return ErrAlreadyBooked
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to book item: %w", err)
+	}
+	return nil
 }
 
 // getItemAndVerifyAccess retrieves an item and its wishlist, checking user access.
-func (s *ItemService) getItemAndVerifyAccess(ctx context.Context, itemID, userID int) (*models.Item, *models.Wishlist, error) {
+func (s *ItemService) getItemAndVerifyAccess(ctx context.Context, itemID, userID uuid.UUID) (*models.Item, *models.Wishlist, error) {
 	item, err := s.itemRepo.GetByID(ctx, itemID)
-	if err != nil || item == nil {
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get item for access check: %w", err)
+	}
+	if item == nil {
 		return nil, nil, ErrNotFound
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
-	if err != nil || w == nil {
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get wishlist for access check: %w", err)
+	}
+	if w == nil {
 		return nil, nil, ErrNotFound
 	}
 	if w.UserID != userID {

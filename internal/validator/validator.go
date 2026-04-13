@@ -24,12 +24,11 @@ func Validate(s interface{}) error {
 
 	var valErr validator.ValidationErrors
 	if !errors.As(err, &valErr) {
-		return err
+		return fmt.Errorf("validation error: %w", err)
 	}
-	validationErrors := valErr
 
 	var messages []string
-	for _, e := range validationErrors {
+	for _, e := range valErr {
 		messages = append(messages, formatError(e))
 	}
 	return fmt.Errorf("%s", strings.Join(messages, "; "))
