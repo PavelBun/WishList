@@ -1,28 +1,26 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"wishlist-api/internal/dto"
 	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/service"
-	"wishlist-api/internal/validator"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// WishlistHandler handles wishlist endpoints.
+// WishlistHandler handles wishlist-related endpoints.
 type WishlistHandler struct {
 	wishlistService *service.WishlistService
 }
 
-// NewWishlistHandler creates a new WishlistHandler.
+// NewWishlistHandler creates a new WishlistHandler instance.
 func NewWishlistHandler(wishlistService *service.WishlistService) *WishlistHandler {
 	return &WishlistHandler{wishlistService: wishlistService}
 }
 
-// Create creates a new wishlist.
+// Create godoc
 // @Summary Create new wishlist
 // @Tags wishlists
 // @Security BearerAuth
@@ -36,23 +34,19 @@ func NewWishlistHandler(wishlistService *service.WishlistService) *WishlistHandl
 func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(int)
 	var req dto.CreateWishlistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-	if err := validator.Validate(req); err != nil {
+	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	wishlist, err := h.wishlistService.Create(r.Context(), userID, req.Title, req.Description, req.EventDate)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONCreated(w, wishlist)
 }
 
-// GetAll returns all wishlists for the authenticated user.
+// GetAll godoc
 // @Summary Get all user's wishlists
 // @Tags wishlists
 // @Security BearerAuth
@@ -64,13 +58,13 @@ func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(int)
 	wishlists, err := h.wishlistService.GetAllByUser(r.Context(), userID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, wishlists)
 }
 
-// GetByID returns a single wishlist by ID.
+// GetByID godoc
 // @Summary Get wishlist by ID
 // @Tags wishlists
 // @Security BearerAuth
@@ -89,13 +83,13 @@ func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 	wishlist, err := h.wishlistService.GetByID(r.Context(), id, userID)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, wishlist)
 }
 
-// Update updates an existing wishlist.
+// Update godoc
 // @Summary Update wishlist
 // @Tags wishlists
 // @Security BearerAuth
@@ -115,22 +109,18 @@ func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateWishlistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-	if err := validator.Validate(req); err != nil {
+	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := h.wishlistService.Update(r.Context(), id, userID, req.Title, req.Description, req.EventDate); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, map[string]string{"status": "updated"})
 }
 
-// Delete deletes a wishlist.
+// Delete godoc
 // @Summary Delete wishlist
 // @Tags wishlists
 // @Security BearerAuth
@@ -147,7 +137,7 @@ func (h *WishlistHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.wishlistService.Delete(r.Context(), id, userID); err != nil {
-		writeJSONError(w, http.StatusNotFound, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, map[string]string{"status": "deleted"})

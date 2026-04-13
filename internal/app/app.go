@@ -53,7 +53,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	wishlistRepo := repository.NewWishlistRepository(pool)
 	itemRepo := repository.NewItemRepository(pool)
 
-	authService := service.NewAuthService(userRepo, cfg.JWTSecret)
+	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
 	wishlistService := service.NewWishlistService(wishlistRepo)
 	itemService := service.NewItemService(itemRepo, wishlistRepo)
 
@@ -63,6 +63,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	publicHandler := handlers.NewPublicHandler(wishlistService, itemService)
 
 	r := chi.NewRouter()
+	r.Use(middleware.RequestIDMiddleware)
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 

@@ -2,67 +2,23 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 	"wishlist-api/internal/models"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// Mock репозитория
-type mockWishlistRepo struct {
-	mock.Mock
-}
-
-func (m *mockWishlistRepo) Create(ctx context.Context, userID int, title, description string, eventDate time.Time) (*models.Wishlist, error) {
-	args := m.Called(ctx, userID, title, description, eventDate)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepo) GetByID(ctx context.Context, id int) (*models.Wishlist, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepo) GetByAccessToken(ctx context.Context, token uuid.UUID) (*models.Wishlist, error) {
-	args := m.Called(ctx, token)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepo) GetAllByUser(ctx context.Context, userID int) ([]models.Wishlist, error) {
-	args := m.Called(ctx, userID)
-	return args.Get(0).([]models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepo) Update(ctx context.Context, w *models.Wishlist) error {
-	args := m.Called(ctx, w)
-	return args.Error(0)
-}
-
-func (m *mockWishlistRepo) Delete(ctx context.Context, id int) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
 func TestWishlistService_Create_Success(t *testing.T) {
-	mockRepo := new(mockWishlistRepo)
+	mockRepo := new(MockWishlistRepository)
 	service := NewWishlistService(mockRepo)
 
 	userID := 1
 	title := "Birthday"
 	desc := "Gifts"
-	eventDate := time.Now().AddDate(0, 1, 0) // через месяц
+	eventDate := time.Now().AddDate(0, 1, 0)
 
 	expectedWishlist := &models.Wishlist{
 		ID:          1,
@@ -82,11 +38,64 @@ func TestWishlistService_Create_Success(t *testing.T) {
 }
 
 func TestWishlistService_Create_PastDate(t *testing.T) {
-	mockRepo := new(mockWishlistRepo)
+	mockRepo := new(MockWishlistRepository)
 	service := NewWishlistService(mockRepo)
 
-	eventDate := time.Now().AddDate(0, 0, -1) // вчера
+	eventDate := time.Now().AddDate(0, 0, -1)
 	_, err := service.Create(context.Background(), 1, "Title", "", eventDate)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "future")
+	assert.True(t, errors.Is(err, ErrInvalidInput))
+}
+
+func TestWishlistService_GetByID_Success(t *testing.T) {
+	mockRepo := new(MockWishlistRepository)
+	service := NewWishlistService(mockRepo)
+
+	wishlist := &models.Wishlist{ID: 1, UserID: 1, Title: "Test"}
+	mockRepo.On("GetByID", mock.Anything, 1).Return(wishlist, nil)
+
+	result, err := service.GetByID(context.Background(), 1, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, wishlist, result)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestWishlistService_GetByID_Forbidden(t *testing.T) {
+	mockRepo := new(MockWishlistRepository)
+	service := NewWishlistService(mockRepo)
+
+	wishlist := &models.Wishlist{ID: 1, UserID: 2, Title: "Test"}
+	mockRepo.On("GetByID", mock.Anything, 1).Return(wishlist, nil)
+
+	_, err := service.GetByID(context.Background(), 1, 1)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrForbidden))
+}
+
+func TestWishlistService_Update_Success(t *testing.T) {
+	mockRepo := new(MockWishlistRepository)
+	service := NewWishlistService(mockRepo)
+
+	wishlist := &models.Wishlist{ID: 1, UserID: 1, Title: "Old", Description: "Old desc", EventDate: time.Now().AddDate(0, 1, 0)}
+	mockRepo.On("GetByID", mock.Anything, 1).Return(wishlist, nil)
+	mockRepo.On("Update", mock.Anything, mock.MatchedBy(func(w *models.Wishlist) bool {
+		return w.Title == "New Title"
+	})).Return(nil)
+
+	err := service.Update(context.Background(), 1, 1, "New Title", "New desc", wishlist.EventDate)
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestWishlistService_Delete_Success(t *testing.T) {
+	mockRepo := new(MockWishlistRepository)
+	service := NewWishlistService(mockRepo)
+
+	wishlist := &models.Wishlist{ID: 1, UserID: 1}
+	mockRepo.On("GetByID", mock.Anything, 1).Return(wishlist, nil)
+	mockRepo.On("Delete", mock.Anything, 1).Return(nil)
+
+	err := service.Delete(context.Background(), 1, 1)
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
 }

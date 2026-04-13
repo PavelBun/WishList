@@ -2,95 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
-	"time"
 	"wishlist-api/internal/models"
+	"wishlist-api/internal/repository"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// Полная реализация мока WishlistRepository
-type mockWishlistRepoFull struct {
-	mock.Mock
-}
-
-func (m *mockWishlistRepoFull) Create(ctx context.Context, userID int, title, description string, eventDate time.Time) (*models.Wishlist, error) {
-	args := m.Called(ctx, userID, title, description, eventDate)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepoFull) GetByID(ctx context.Context, id int) (*models.Wishlist, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepoFull) GetByAccessToken(ctx context.Context, token uuid.UUID) (*models.Wishlist, error) {
-	args := m.Called(ctx, token)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepoFull) GetAllByUser(ctx context.Context, userID int) ([]models.Wishlist, error) {
-	args := m.Called(ctx, userID)
-	return args.Get(0).([]models.Wishlist), args.Error(1)
-}
-
-func (m *mockWishlistRepoFull) Update(ctx context.Context, w *models.Wishlist) error {
-	args := m.Called(ctx, w)
-	return args.Error(0)
-}
-
-func (m *mockWishlistRepoFull) Delete(ctx context.Context, id int) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-// Мок для ItemRepository (уже был)
-type mockItemRepoFull struct {
-	mock.Mock
-}
-
-func (m *mockItemRepoFull) Create(ctx context.Context, item *models.Item) error {
-	args := m.Called(ctx, item)
-	return args.Error(0)
-}
-func (m *mockItemRepoFull) GetByID(ctx context.Context, id int) (*models.Item, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Item), args.Error(1)
-}
-func (m *mockItemRepoFull) GetAllByWishlistID(ctx context.Context, wishlistID int) ([]models.Item, error) {
-	args := m.Called(ctx, wishlistID)
-	return args.Get(0).([]models.Item), args.Error(1)
-}
-func (m *mockItemRepoFull) Update(ctx context.Context, item *models.Item) error {
-	args := m.Called(ctx, item)
-	return args.Error(0)
-}
-func (m *mockItemRepoFull) Delete(ctx context.Context, id int) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-func (m *mockItemRepoFull) BookItem(ctx context.Context, id int) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
 func TestItemService_Create_Success(t *testing.T) {
-	mockItemRepo := new(mockItemRepoFull)
-	mockWishlistRepo := new(mockWishlistRepoFull)
+	mockItemRepo := new(MockItemRepository)
+	mockWishlistRepo := new(MockWishlistRepository)
 	service := NewItemService(mockItemRepo, mockWishlistRepo)
 
 	wishlistID := 10
@@ -114,9 +37,19 @@ func TestItemService_Create_Success(t *testing.T) {
 	mockItemRepo.AssertExpectations(t)
 }
 
-func TestItemService_BookItem(t *testing.T) {
-	mockItemRepo := new(mockItemRepoFull)
-	mockWishlistRepo := new(mockWishlistRepoFull)
+func TestItemService_Create_InvalidPriority(t *testing.T) {
+	mockItemRepo := new(MockItemRepository)
+	mockWishlistRepo := new(MockWishlistRepository)
+	service := NewItemService(mockItemRepo, mockWishlistRepo)
+
+	_, err := service.Create(context.Background(), 1, 1, "title", "", "", 0)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidInput))
+}
+
+func TestItemService_BookItem_Success(t *testing.T) {
+	mockItemRepo := new(MockItemRepository)
+	mockWishlistRepo := new(MockWishlistRepository)
 	service := NewItemService(mockItemRepo, mockWishlistRepo)
 
 	itemID := 5
@@ -127,6 +60,61 @@ func TestItemService_BookItem(t *testing.T) {
 	mockItemRepo.On("BookItem", mock.Anything, itemID).Return(nil)
 
 	err := service.BookItem(context.Background(), itemID, wishlistID)
+	assert.NoError(t, err)
+	mockItemRepo.AssertExpectations(t)
+}
+
+func TestItemService_BookItem_AlreadyBooked(t *testing.T) {
+	mockItemRepo := new(MockItemRepository)
+	mockWishlistRepo := new(MockWishlistRepository)
+	service := NewItemService(mockItemRepo, mockWishlistRepo)
+
+	itemID := 5
+	wishlistID := 10
+	item := &models.Item{ID: itemID, WishlistID: wishlistID}
+
+	mockItemRepo.On("GetByID", mock.Anything, itemID).Return(item, nil)
+	mockItemRepo.On("BookItem", mock.Anything, itemID).Return(repository.ErrAlreadyBooked)
+
+	err := service.BookItem(context.Background(), itemID, wishlistID)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrAlreadyBooked))
+}
+
+func TestItemService_GetByID_Success(t *testing.T) {
+	mockItemRepo := new(MockItemRepository)
+	mockWishlistRepo := new(MockWishlistRepository)
+	service := NewItemService(mockItemRepo, mockWishlistRepo)
+
+	item := &models.Item{ID: 1, WishlistID: 10}
+	wishlist := &models.Wishlist{ID: 10, UserID: 1}
+
+	mockItemRepo.On("GetByID", mock.Anything, 1).Return(item, nil)
+	mockWishlistRepo.On("GetByID", mock.Anything, 10).Return(wishlist, nil)
+
+	result, err := service.GetByID(context.Background(), 1, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, item, result)
+}
+
+func TestItemService_Update_Success(t *testing.T) {
+	mockItemRepo := new(MockItemRepository)
+	mockWishlistRepo := new(MockWishlistRepository)
+	service := NewItemService(mockItemRepo, mockWishlistRepo)
+
+	item := &models.Item{ID: 1, WishlistID: 10, Title: "Old"}
+	wishlist := &models.Wishlist{ID: 10, UserID: 1}
+
+	mockItemRepo.On("GetByID", mock.Anything, 1).Return(item, nil)
+	mockWishlistRepo.On("GetByID", mock.Anything, 10).Return(wishlist, nil)
+
+	newTitle := "New Title"
+	newPriority := 3
+	mockItemRepo.On("Update", mock.Anything, mock.MatchedBy(func(i *models.Item) bool {
+		return i.Title == newTitle && i.Priority == newPriority
+	})).Return(nil)
+
+	err := service.Update(context.Background(), 1, 1, &newTitle, nil, nil, &newPriority)
 	assert.NoError(t, err)
 	mockItemRepo.AssertExpectations(t)
 }

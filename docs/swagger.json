@@ -1,8 +1,13 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "REST API сервис для создания вишлистов и бронирования подарков.",
+        "title": "Wishlist API",
+        "contact": {},
+        "version": "1.0"
     },
+    "host": "localhost:8080",
+    "basePath": "/",
     "paths": {
         "/auth/login": {
             "post": {
@@ -220,6 +225,12 @@
                 "responses": {
                     "200": {
                         "description": "booked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "item already booked",
                         "schema": {
                             "type": "string"
                         }
@@ -743,6 +754,13 @@
                     "type": "integer"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }

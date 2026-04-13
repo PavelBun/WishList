@@ -1,28 +1,26 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"wishlist-api/internal/dto"
 	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/service"
-	"wishlist-api/internal/validator"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// ItemHandler handles wishlist item endpoints.
+// ItemHandler handles item-related endpoints.
 type ItemHandler struct {
 	itemService *service.ItemService
 }
 
-// NewItemHandler creates a new ItemHandler.
+// NewItemHandler creates a new ItemHandler instance.
 func NewItemHandler(itemService *service.ItemService) *ItemHandler {
 	return &ItemHandler{itemService: itemService}
 }
 
-// Create creates a new item in a wishlist.
+// Create godoc
 // @Summary Create item in wishlist
 // @Tags items
 // @Security BearerAuth
@@ -41,23 +39,19 @@ func (h *ItemHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.CreateItemRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-	if err := validator.Validate(req); err != nil {
+	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	item, err := h.itemService.Create(r.Context(), wishlistID, userID, req.Title, req.Description, req.ProductLink, req.Priority)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONCreated(w, item)
 }
 
-// GetAll returns all items of a wishlist.
+// GetAll godoc
 // @Summary Get all items of a wishlist
 // @Tags items
 // @Security BearerAuth
@@ -75,13 +69,13 @@ func (h *ItemHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := h.itemService.GetAllByWishlistID(r.Context(), wishlistID, userID)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, items)
 }
 
-// Update updates an existing item.
+// Update godoc
 // @Summary Update item
 // @Tags items
 // @Security BearerAuth
@@ -100,22 +94,18 @@ func (h *ItemHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateItemRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-	if err := validator.Validate(req); err != nil {
+	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := h.itemService.Update(r.Context(), id, userID, req.Title, req.Description, req.ProductLink, req.Priority); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, map[string]string{"status": "updated"})
 }
 
-// Delete deletes an item.
+// Delete godoc
 // @Summary Delete item
 // @Tags items
 // @Security BearerAuth
@@ -131,7 +121,7 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.itemService.Delete(r.Context(), id, userID); err != nil {
-		writeJSONError(w, http.StatusNotFound, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, map[string]string{"status": "deleted"})

@@ -1,3 +1,4 @@
+basePath: /
 definitions:
   dto.CreateItemRequest:
     properties:
@@ -142,8 +143,12 @@ definitions:
       user_id:
         type: integer
     type: object
+host: localhost:8080
 info:
   contact: {}
+  description: REST API сервис для создания вишлистов и бронирования подарков.
+  title: Wishlist API
+  version: "1.0"
 paths:
   /auth/login:
     post:
@@ -282,6 +287,10 @@ paths:
       responses:
         "200":
           description: booked
+          schema:
+            type: string
+        "409":
+          description: item already booked
           schema:
             type: string
       summary: Book an item in public wishlist
@@ -478,4 +487,9 @@ paths:
       summary: Create item in wishlist
       tags:
       - items
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

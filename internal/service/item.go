@@ -7,7 +7,7 @@ import (
 	"wishlist-api/internal/repository"
 )
 
-// ItemService handles business logic for wishlist items.
+// ItemService handles wishlist item operations.
 type ItemService struct {
 	itemRepo     repository.ItemRepository
 	wishlistRepo repository.WishlistRepository
@@ -24,14 +24,14 @@ func NewItemService(itemRepo repository.ItemRepository, wishlistRepo repository.
 // Create adds a new item to a wishlist.
 func (s *ItemService) Create(ctx context.Context, wishlistID, userID int, title, description, productLink string, priority int) (*models.Item, error) {
 	if priority < 1 || priority > 5 {
-		return nil, errors.New("priority must be between 1 and 5")
+		return nil, ErrInvalidInput
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, wishlistID)
 	if err != nil || w == nil {
-		return nil, errors.New("wishlist not found")
+		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
-		return nil, errors.New("access denied")
+		return nil, ErrForbidden
 	}
 	item := &models.Item{
 		WishlistID:  wishlistID,
@@ -47,64 +47,57 @@ func (s *ItemService) Create(ctx context.Context, wishlistID, userID int, title,
 	return item, nil
 }
 
-// GetByID returns an item by its ID after verifying access.
+// GetByID returns an item by ID, checking user ownership.
 func (s *ItemService) GetByID(ctx context.Context, id, userID int) (*models.Item, error) {
 	item, err := s.itemRepo.GetByID(ctx, id)
 	if err != nil || item == nil {
-		return nil, errors.New("item not found")
+		return nil, ErrNotFound
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
 	if err != nil || w == nil {
-		return nil, errors.New("wishlist not found")
+		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
-		return nil, errors.New("access denied")
+		return nil, ErrForbidden
 	}
 	return item, nil
 }
 
-// GetAllByWishlistID returns all items of a wishlist after verifying access.
+// GetAllByWishlistID returns all items of a wishlist, checking user ownership.
 func (s *ItemService) GetAllByWishlistID(ctx context.Context, wishlistID, userID int) ([]models.Item, error) {
 	w, err := s.wishlistRepo.GetByID(ctx, wishlistID)
 	if err != nil || w == nil {
-		return nil, errors.New("wishlist not found")
+		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
-		return nil, errors.New("access denied")
+		return nil, ErrForbidden
 	}
 	return s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
 }
 
-// GetAllPublicByWishlistID returns all items of a wishlist without access check.
+// GetAllPublicByWishlistID returns all items of a wishlist without auth checks.
 func (s *ItemService) GetAllPublicByWishlistID(ctx context.Context, wishlistID int) ([]models.Item, error) {
 	return s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
 }
 
-func (s *ItemService) getItemAndVerifyAccess(ctx context.Context, itemID, userID int) (*models.Item, *models.Wishlist, error) {
-	item, err := s.itemRepo.GetByID(ctx, itemID)
-	if err != nil || item == nil {
-		return nil, nil, errors.New("item not found")
-	}
-	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
-	if err != nil || w == nil {
-		return nil, nil, errors.New("wishlist not found")
-	}
-	if w.UserID != userID {
-		return nil, nil, errors.New("access denied")
-	}
-	return item, w, nil
-}
-
 // Update modifies an existing item.
-func (s *ItemService) Update(ctx context.Context, id, userID int, title, description, productLink string, priority int) error {
+func (s *ItemService) Update(ctx context.Context, id, userID int, title *string, description *string, productLink *string, priority *int) error {
 	item, _, err := s.getItemAndVerifyAccess(ctx, id, userID)
 	if err != nil {
 		return err
 	}
-	item.Title = title
-	item.Description = description
-	item.ProductLink = productLink
-	item.Priority = priority
+	if title != nil {
+		item.Title = *title
+	}
+	if description != nil {
+		item.Description = *description
+	}
+	if productLink != nil {
+		item.ProductLink = *productLink
+	}
+	if priority != nil {
+		item.Priority = *priority
+	}
 	return s.itemRepo.Update(ctx, item)
 }
 
@@ -117,14 +110,34 @@ func (s *ItemService) Delete(ctx context.Context, id, userID int) error {
 	return s.itemRepo.Delete(ctx, id)
 }
 
-// BookItem marks an item as reserved.
+// BookItem marks an item as booked. Returns ErrAlreadyBooked if already booked.
 func (s *ItemService) BookItem(ctx context.Context, id int, wishlistID int) error {
 	item, err := s.itemRepo.GetByID(ctx, id)
 	if err != nil || item == nil {
-		return errors.New("item not found")
+		return ErrNotFound
 	}
 	if item.WishlistID != wishlistID {
-		return errors.New("item does not belong to this wishlist")
+		return ErrForbidden
 	}
-	return s.itemRepo.BookItem(ctx, id)
+	err = s.itemRepo.BookItem(ctx, id)
+	if errors.Is(err, repository.ErrAlreadyBooked) {
+		return ErrAlreadyBooked
+	}
+	return err
+}
+
+// getItemAndVerifyAccess retrieves an item and its wishlist, checking user access.
+func (s *ItemService) getItemAndVerifyAccess(ctx context.Context, itemID, userID int) (*models.Item, *models.Wishlist, error) {
+	item, err := s.itemRepo.GetByID(ctx, itemID)
+	if err != nil || item == nil {
+		return nil, nil, ErrNotFound
+	}
+	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
+	if err != nil || w == nil {
+		return nil, nil, ErrNotFound
+	}
+	if w.UserID != userID {
+		return nil, nil, ErrForbidden
+	}
+	return item, w, nil
 }

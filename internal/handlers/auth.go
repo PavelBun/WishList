@@ -1,3 +1,4 @@
+// Package handlers contains HTTP request handlers.
 package handlers
 
 import (
@@ -6,17 +7,17 @@ import (
 	"wishlist-api/internal/service"
 )
 
-// AuthHandler handles authentication-related endpoints.
+// AuthHandler handles authentication endpoints.
 type AuthHandler struct {
 	authService *service.AuthService
 }
 
-// NewAuthHandler creates a new AuthHandler.
+// NewAuthHandler creates a new AuthHandler instance.
 func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// Register handles user registration.
+// Register godoc
 // @Summary Register new user
 // @Tags auth
 // @Accept json
@@ -34,13 +35,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.authService.Register(r.Context(), req.Email, req.Password)
 	if err != nil {
-		writeJSONError(w, http.StatusConflict, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONCreated(w, user)
 }
 
-// Login handles user login and returns a JWT token.
+// Login godoc
 // @Summary Login user
 // @Tags auth
 // @Accept json
@@ -58,7 +59,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := h.authService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, err.Error())
+		writeSafeError(w, r, err)
 		return
 	}
 	writeJSONSuccess(w, dto.LoginResponse{Token: token})

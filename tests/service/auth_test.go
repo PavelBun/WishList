@@ -39,7 +39,7 @@ func TestAuthService_Register(t *testing.T) {
 			}, nil
 		},
 	}
-	authService := service.NewAuthService(repo, "test-secret")
+	authService := service.NewAuthService(repo, "test-secret", 24)
 
 	user, err := authService.Register(ctx, "test@example.com", "password123")
 	assert.NoError(t, err)
@@ -58,7 +58,7 @@ func TestAuthService_Login(t *testing.T) {
 			}, nil
 		},
 	}
-	authService := service.NewAuthService(repo, "test-secret")
+	authService := service.NewAuthService(repo, "test-secret", 24)
 
 	token, err := authService.Login(ctx, "test@example.com", "password123")
 	assert.NoError(t, err)
