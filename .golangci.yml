@@ -1,0 +1,40 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - revive
+    - misspell
+    - unconvert
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+settings:
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+  staticcheck:
+    checks:
+      - all
+      - -ST1000
+      - -ST1003
+  misspell:
+    locale: US
+
+issues:
+  exclude-dirs:
+    - docs
+    - vendor
+  exclude-files:
+    - ".*_test\\.go$"
+
+run:
+  timeout: 5m
