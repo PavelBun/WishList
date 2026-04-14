@@ -3,21 +3,17 @@ package handlers
 import (
 	"net/http"
 	"wishlist-api/internal/dto"
-	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/models"
 	"wishlist-api/internal/service"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // ItemHandler handles item-related endpoints.
 type ItemHandler struct {
-	itemService *service.ItemService
+	itemService service.ItemServiceInterface
 }
 
 // NewItemHandler creates a new ItemHandler instance.
-func NewItemHandler(itemService *service.ItemService) *ItemHandler {
+func NewItemHandler(itemService service.ItemServiceInterface) *ItemHandler {
 	return &ItemHandler{itemService: itemService}
 }
 
@@ -32,18 +28,24 @@ func NewItemHandler(itemService *service.ItemService) *ItemHandler {
 // @Success 201 {object} models.Item
 // @Router /wishlists/{wishlist_id}/items [post]
 func (h *ItemHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	wishlistIDStr := chi.URLParam(r, "wishlist_id")
-	wishlistID, err := uuid.Parse(wishlistIDStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	wishlistID, err := parseUUIDParam(r, "wishlist_id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid wishlist ID")
 		return
 	}
+
 	var req dto.CreateItemRequest
 	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	item, err := h.itemService.Create(r.Context(), wishlistID, userID, req.Title, req.Description, req.ProductLink, req.Priority)
 	if err != nil {
 		writeSafeError(w, r, err)
@@ -61,13 +63,18 @@ func (h *ItemHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {array} models.Item
 // @Router /wishlists/{wishlist_id}/items [get]
 func (h *ItemHandler) GetAll(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	wishlistIDStr := chi.URLParam(r, "wishlist_id")
-	wishlistID, err := uuid.Parse(wishlistIDStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	wishlistID, err := parseUUIDParam(r, "wishlist_id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid wishlist ID")
 		return
 	}
+
 	items, err := h.itemService.GetAllByWishlistID(r.Context(), wishlistID, userID)
 	if err != nil {
 		writeSafeError(w, r, err)
@@ -92,13 +99,18 @@ func (h *ItemHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {string} string "Item not found"
 // @Router /items/{id} [get]
 func (h *ItemHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseUUIDParam(r, "id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
+
 	item, err := h.itemService.GetByID(r.Context(), id, userID)
 	if err != nil {
 		writeSafeError(w, r, err)
@@ -122,18 +134,24 @@ func (h *ItemHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {string} string "Item not found"
 // @Router /items/{id} [put]
 func (h *ItemHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseUUIDParam(r, "id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
+
 	var req dto.UpdateItemRequest
 	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	if err := h.itemService.Update(r.Context(), id, userID, req.Title, req.Description, req.ProductLink, req.Priority); err != nil {
 		writeSafeError(w, r, err)
 		return
@@ -141,7 +159,6 @@ func (h *ItemHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.itemService.GetByID(r.Context(), id, userID)
 	if err != nil {
-		// This should not happen after successful update, but handle gracefully
 		writeJSONSuccess(w, map[string]string{"status": "updated"})
 		return
 	}
@@ -160,13 +177,18 @@ func (h *ItemHandler) Update(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {string} string "Item not found"
 // @Router /items/{id} [delete]
 func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseUUIDParam(r, "id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
+
 	if err := h.itemService.Delete(r.Context(), id, userID); err != nil {
 		writeSafeError(w, r, err)
 		return

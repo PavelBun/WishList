@@ -10,13 +10,19 @@ import (
 
 // PublicHandler handles public endpoints (no auth).
 type PublicHandler struct {
-	wishlistService *service.WishlistService
-	itemService     *service.ItemService
+	wishlistService service.WishlistServiceInterface
+	itemService     service.ItemServiceInterface
 }
 
 // NewPublicHandler creates a new PublicHandler instance.
-func NewPublicHandler(wishlistService *service.WishlistService, itemService *service.ItemService) *PublicHandler {
-	return &PublicHandler{wishlistService: wishlistService, itemService: itemService}
+func NewPublicHandler(
+	wishlistService service.WishlistServiceInterface,
+	itemService service.ItemServiceInterface,
+) *PublicHandler {
+	return &PublicHandler{
+		wishlistService: wishlistService,
+		itemService:     itemService,
+	}
 }
 
 // GetWishlistByToken godoc

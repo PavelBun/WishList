@@ -86,7 +86,11 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 
 // ValidateToken parses and validates a JWT token, returning the user ID.
 func (s *AuthService) ValidateToken(tokenString string) (uuid.UUID, error) {
-	token, err := jwt.Parse(tokenString, func(_ *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Явно проверяем, что алгоритм подписи — HMAC
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return []byte(s.jwtSecret), nil
 	})
 	if err != nil || !token.Valid {

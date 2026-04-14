@@ -4,21 +4,20 @@ import (
 	"net/http"
 	"time"
 	"wishlist-api/internal/dto"
-	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/service"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // WishlistHandler handles wishlist-related endpoints.
 type WishlistHandler struct {
-	wishlistService *service.WishlistService
-	itemService     *service.ItemService
+	wishlistService service.WishlistServiceInterface
+	itemService     service.ItemServiceInterface
 }
 
 // NewWishlistHandler creates a new WishlistHandler instance.
-func NewWishlistHandler(wishlistService *service.WishlistService, itemService *service.ItemService) *WishlistHandler {
+func NewWishlistHandler(
+	wishlistService service.WishlistServiceInterface,
+	itemService service.ItemServiceInterface,
+) *WishlistHandler {
 	return &WishlistHandler{
 		wishlistService: wishlistService,
 		itemService:     itemService,
@@ -35,7 +34,12 @@ func NewWishlistHandler(wishlistService *service.WishlistService, itemService *s
 // @Success 201 {object} models.Wishlist
 // @Router /wishlists [post]
 func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var req dto.CreateWishlistRequest
 	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -64,7 +68,12 @@ func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {array} models.Wishlist
 // @Router /wishlists [get]
 func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	wishlists, err := h.wishlistService.GetAllByUser(r.Context(), userID)
 	if err != nil {
 		writeSafeError(w, r, err)
@@ -82,19 +91,24 @@ func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} models.Wishlist
 // @Router /wishlists/{id} [get]
 func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseUUIDParam(r, "id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid ID")
 		return
 	}
+
 	wishlist, err := h.wishlistService.GetByID(r.Context(), id, userID)
 	if err != nil {
 		writeSafeError(w, r, err)
 		return
 	}
-	// Загружаем предметы
+
 	items, err := h.itemService.GetAllByWishlistID(r.Context(), id, userID)
 	if err != nil {
 		writeSafeError(w, r, err)
@@ -115,13 +129,18 @@ func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} models.Wishlist
 // @Router /wishlists/{id} [put]
 func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseUUIDParam(r, "id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid ID")
 		return
 	}
+
 	var req dto.UpdateWishlistRequest
 	if err := decodeAndValidate(r, &req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -159,13 +178,18 @@ func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 // @Success 204 "No Content"
 // @Router /wishlists/{id} [delete]
 func (h *WishlistHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	userID, err := getUserID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseUUIDParam(r, "id")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid ID")
 		return
 	}
+
 	if err := h.wishlistService.Delete(r.Context(), id, userID); err != nil {
 		writeSafeError(w, r, err)
 		return

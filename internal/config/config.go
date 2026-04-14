@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -19,6 +20,7 @@ type Config struct {
 	AppPort        string
 	JWTSecret      string
 	JWTExpiryHours int
+	CORSOrigins    []string
 }
 
 // Load reads configuration from .env file and environment variables.
@@ -37,6 +39,13 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// CORS origins – comma separated list, defaults to "*"
+	corsOriginsStr := getEnv("CORS_ALLOWED_ORIGINS", "*")
+	corsOrigins := strings.Split(corsOriginsStr, ",")
+	for i := range corsOrigins {
+		corsOrigins[i] = strings.TrimSpace(corsOrigins[i])
+	}
+
 	return &Config{
 		DBHost:         getEnv("DB_HOST", "localhost"),
 		DBPort:         getEnv("DB_PORT", "5432"),
@@ -46,6 +55,7 @@ func Load() (*Config, error) {
 		AppPort:        getEnv("APP_PORT", "8080"),
 		JWTSecret:      jwtSecret,
 		JWTExpiryHours: expiryHours,
+		CORSOrigins:    corsOrigins,
 	}, nil
 }
 

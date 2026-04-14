@@ -2,10 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/validator"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // writeJSON writes any JSON response.
@@ -37,4 +42,26 @@ func decodeAndValidate(r *http.Request, dst interface{}) error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 	return nil
+}
+
+// getUserID extracts the authenticated user ID from request context.
+func getUserID(r *http.Request) (uuid.UUID, error) {
+	id, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		return uuid.Nil, errors.New("user ID not found in context")
+	}
+	return id, nil
+}
+
+// parseUUIDParam extracts and parses a UUID path parameter.
+func parseUUIDParam(r *http.Request, name string) (uuid.UUID, error) {
+	param := chi.URLParam(r, name)
+	if param == "" {
+		return uuid.Nil, fmt.Errorf("missing path parameter %s", name)
+	}
+	id, err := uuid.Parse(param)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid UUID for %s: %w", name, err)
+	}
+	return id, nil
 }
