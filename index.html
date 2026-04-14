@@ -93,12 +93,21 @@
             padding: 6px 12px;
             font-size: 12px;
             width: auto;
+            display: inline-block;
+            margin-right: 6px;
         }
         .danger-btn {
             background-color: #dc3545;
         }
         .danger-btn:hover {
             background-color: #b02a37;
+        }
+        .edit-btn {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .edit-btn:hover {
+            background-color: #e0a800;
         }
         nav {
             display: flex;
@@ -121,6 +130,27 @@
         }
         hr {
             margin: 20px 0;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            max-width: 600px;
+            width: 90%;
+            border-radius: 12px;
+            padding: 20px;
+            max-height: 80%;
+            overflow: auto;
         }
     </style>
 </head>
@@ -254,21 +284,66 @@
                 <strong>${escapeHtml(wl.title)}</strong> (${new Date(wl.event_date).toLocaleDateString()})<br>
                 <small>${escapeHtml(wl.description || '')}</small><br>
                 <div class="token-badge">Публичный токен: ${wl.access_token}</div>
-                <button class="small-btn" data-id="${wl.id}" data-token="${wl.access_token}" data-title="${escapeHtml(wl.title)}" onclick="viewWishlistDetails('${wl.id}', '${wl.access_token}', '${escapeHtml(wl.title)}')">Детали / Подарки</button>
-                <button class="small-btn danger-btn" data-id="${wl.id}" onclick="deleteWishlist('${wl.id}')">Удалить</button>
+                <div class="flex-buttons">
+                    <button class="small-btn" data-id="${wl.id}" data-token="${wl.access_token}" data-title="${escapeHtml(wl.title)}" onclick="viewWishlistDetails('${wl.id}', '${wl.access_token}', '${escapeHtml(wl.title)}')">Детали / Подарки</button>
+                    <button class="small-btn edit-btn" data-id="${wl.id}" onclick="editWishlist('${wl.id}')">✏️ Редактировать</button>
+                    <button class="small-btn danger-btn" data-id="${wl.id}" onclick="deleteWishlist('${wl.id}')">Удалить</button>
+                </div>
             `;
             container.appendChild(wlDiv);
         }
     }
 
+    // Редактирование вишлиста
+    window.editWishlist = async function(wishlistId) {
+        const { ok, data: wishlist } = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
+        if (!ok) {
+            alert('Не удалось загрузить вишлист для редактирования');
+            return;
+        }
+        const modalHtml = `
+            <div class="modal" id="editWishlistModal">
+                <div class="modal-content">
+                    <h3>Редактировать вишлист</h3>
+                    <input type="text" id="editWishlistTitle" placeholder="Название" value="${escapeHtml(wishlist.title)}">
+                    <textarea id="editWishlistDesc" rows="2" placeholder="Описание">${escapeHtml(wishlist.description || '')}</textarea>
+                    <input type="date" id="editWishlistDate" value="${wishlist.event_date.slice(0,10)}">
+                    <button id="saveWishlistBtn">Сохранить</button>
+                    <button id="cancelWishlistBtn" class="danger-btn">Отмена</button>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        document.getElementById('saveWishlistBtn').onclick = async () => {
+            const title = document.getElementById('editWishlistTitle').value.trim();
+            const description = document.getElementById('editWishlistDesc').value;
+            const eventDate = document.getElementById('editWishlistDate').value;
+            if (!title) {
+                alert('Название обязательно');
+                return;
+            }
+            const payload = { title };
+            if (description) payload.description = description;
+            if (eventDate) payload.event_date = eventDate;
+            const { ok } = await apiRequest(`/wishlists/${wishlistId}`, 'PUT', payload, true);
+            if (ok) {
+                alert('Вишлист обновлён');
+                closeModal('editWishlistModal');
+                loadWishlists();
+            } else {
+                alert('Ошибка обновления');
+            }
+        };
+        document.getElementById('cancelWishlistBtn').onclick = () => closeModal('editWishlistModal');
+    };
+
+    // Просмотр деталей вишлиста
     window.viewWishlistDetails = async function(wishlistId, accessToken, title) {
-        // Загружаем детали вишлиста
         const { ok, data: wishlist } = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
         if (!ok) {
             alert('Не удалось загрузить вишлист');
             return;
         }
-        // Загружаем предметы
         const itemsRes = await apiRequest(`/wishlists/${wishlistId}/items`, 'GET', null, true);
         const items = (itemsRes.ok && itemsRes.data) ? itemsRes.data : [];
 
@@ -278,20 +353,24 @@
         } else {
             for (const item of items) {
                 itemsHtml += `
-            <div class="item-card">
-                <strong>${escapeHtml(item.title)}</strong> (приоритет: ${item.priority})<br>
-                ${item.description ? escapeHtml(item.description) + '<br>' : ''}
-                ${item.product_link ? `<a href="${item.product_link}" target="_blank">Ссылка</a><br>` : ''}
-                Статус: ${item.is_booked ? '🔴 Забронирован' : '🟢 Свободен'}<br>
-                <button class="small-btn" onclick="deleteItem('${item.id}', '${wishlistId}')">Удалить</button>
-            </div>
-        `;
+                    <div class="item-card" id="item-${item.id}">
+                        <strong>${escapeHtml(item.title)}</strong> (приоритет: ${item.priority})<br>
+                        ${item.description ? escapeHtml(item.description) + '<br>' : ''}
+                        ${item.product_link ? `<a href="${item.product_link}" target="_blank">Ссылка</a><br>` : ''}
+                        Статус: ${item.is_booked ? '🔴 Забронирован' : '🟢 Свободен'}<br>
+                        <div class="flex-buttons">
+                            <button class="small-btn edit-btn" onclick="editItem('${item.id}', '${wishlistId}')">✏️ Редактировать</button>
+                            <button class="small-btn danger-btn" onclick="deleteItem('${item.id}', '${wishlistId}')">Удалить</button>
+                        </div>
+                    </div>
+                `;
             }
         }
+
         const modalHtml = `
-            <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000;" id="modal">
-                <div style="background:white; max-width:500px; width:90%; border-radius:12px; padding:20px; max-height:80%; overflow:auto;">
-                    <h3>${escapeHtml(title)}</h3>
+            <div class="modal" id="detailsModal">
+                <div class="modal-content">
+                    <h3>${escapeHtml(wishlist.title)}</h3>
                     <p>Дата: ${new Date(wishlist.event_date).toLocaleDateString()}</p>
                     <p>Описание: ${escapeHtml(wishlist.description || '')}</p>
                     <hr>
@@ -306,10 +385,10 @@
                         <option value="4">4</option>
                         <option value="5">5 — высший</option>
                     </select>
-                    <button id="addItemBtn" data-wishlist="${wishlistId}">➕ Добавить</button>
+                    <button id="addItemBtn">➕ Добавить</button>
                     <hr>
                     ${itemsHtml}
-                    <button onclick="closeModal()">Закрыть</button>
+                    <button id="closeDetailsBtn">Закрыть</button>
                 </div>
             </div>
         `;
@@ -324,15 +403,81 @@
                 product_link: document.getElementById('itemLink').value,
                 priority
             };
-            const { ok, data: newItem } = await apiRequest(`/wishlists/${wishlistId}/items`, 'POST', payload, true);
+            const { ok } = await apiRequest(`/wishlists/${wishlistId}/items`, 'POST', payload, true);
             if (ok) {
                 alert('Подарок добавлен!');
-                closeModal();
+                closeModal('detailsModal');
                 viewWishlistDetails(wishlistId, accessToken, title);
             } else {
                 alert('Ошибка добавления');
             }
         });
+        document.getElementById('closeDetailsBtn').addEventListener('click', () => closeModal('detailsModal'));
+    };
+
+    // Редактирование подарка
+    window.editItem = async function(itemId, wishlistId) {
+        const { ok, data: item } = await apiRequest(`/items/${itemId}`, 'GET', null, true);
+        if (!ok) {
+            alert('Не удалось загрузить данные подарка');
+            return;
+        }
+        const modalHtml = `
+            <div class="modal" id="editItemModal">
+                <div class="modal-content">
+                    <h3>Редактировать подарок</h3>
+                    <input type="text" id="editItemTitle" placeholder="Название" value="${escapeHtml(item.title)}">
+                    <textarea id="editItemDesc" rows="2" placeholder="Описание">${escapeHtml(item.description || '')}</textarea>
+                    <input type="text" id="editItemLink" placeholder="Ссылка" value="${escapeHtml(item.product_link || '')}">
+                    <select id="editItemPriority">
+                        <option value="1" ${item.priority === 1 ? 'selected' : ''}>1 — низкий</option>
+                        <option value="2" ${item.priority === 2 ? 'selected' : ''}>2</option>
+                        <option value="3" ${item.priority === 3 ? 'selected' : ''}>3 — средний</option>
+                        <option value="4" ${item.priority === 4 ? 'selected' : ''}>4</option>
+                        <option value="5" ${item.priority === 5 ? 'selected' : ''}>5 — высший</option>
+                    </select>
+                    <button id="saveItemBtn">Сохранить</button>
+                    <button id="cancelItemBtn" class="danger-btn">Отмена</button>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        document.getElementById('saveItemBtn').onclick = async () => {
+            const title = document.getElementById('editItemTitle').value.trim();
+            if (!title) {
+                alert('Название обязательно');
+                return;
+            }
+            const payload = { title };
+            const description = document.getElementById('editItemDesc').value;
+            if (description) payload.description = description;
+            const link = document.getElementById('editItemLink').value.trim();
+            if (link) payload.product_link = link;
+            const priority = parseInt(document.getElementById('editItemPriority').value, 10);
+            if (priority) payload.priority = priority;
+
+            const { ok, data } = await apiRequest(`/items/${itemId}`, 'PUT', payload, true);
+            if (ok) {
+                alert('Подарок обновлён');
+                closeModal('editItemModal');
+                const detailsModal = document.getElementById('detailsModal');
+                if (detailsModal) {
+                    const wishlist = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
+                    if (wishlist.ok) {
+                        closeModal('detailsModal');
+                        viewWishlistDetails(wishlistId, wishlist.data.access_token, wishlist.data.title);
+                    } else {
+                        loadWishlists();
+                    }
+                } else {
+                    loadWishlists();
+                }
+            } else {
+                const errorMsg = data?.error || 'Ошибка обновления';
+                alert(`Ошибка: ${errorMsg}`);
+            }
+        };
+        document.getElementById('cancelItemBtn').onclick = () => closeModal('editItemModal');
     };
 
     window.deleteWishlist = async function(wishlistId) {
@@ -349,24 +494,28 @@
         if (!confirm('Удалить подарок?')) return;
         const { ok } = await apiRequest(`/items/${itemId}`, 'DELETE', null, true);
         if (ok) {
-            // обновим модальное окно — перезагрузим детали
-            const { data: wishlist } = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
-            if (wishlist) {
-                closeModal();
-                viewWishlistDetails(wishlistId, wishlist.access_token, wishlist.title);
+            const detailsModal = document.getElementById('detailsModal');
+            if (detailsModal) {
+                const wishlist = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
+                if (wishlist.ok) {
+                    closeModal('detailsModal');
+                    viewWishlistDetails(wishlistId, wishlist.data.access_token, wishlist.data.title);
+                } else {
+                    loadWishlists();
+                    closeModal('detailsModal');
+                }
             } else {
                 loadWishlists();
-                closeModal();
             }
         } else {
             alert('Ошибка удаления');
         }
     };
 
-    window.closeModal = function() {
-        const modal = document.getElementById('modal');
+    function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
         if (modal) modal.remove();
-    };
+    }
 
     // Публичный просмотр и бронирование
     document.getElementById('loadPublicWishlistBtn').addEventListener('click', async () => {
@@ -399,7 +548,6 @@
         const { ok, status } = await apiRequest(`/public/wishlists/${publicToken}/items/${itemId}/book`, 'POST');
         if (status === 204) {
             alert('Подарок успешно забронирован!');
-            // обновить отображение
             document.getElementById('loadPublicWishlistBtn').click();
         } else if (status === 409) {
             alert('Подарок уже забронирован кем-то другим');
@@ -473,8 +621,6 @@
             if (m === '<') return '&lt;';
             if (m === '>') return '&gt;';
             return m;
-        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
-            return c;
         });
     }
 </script>
