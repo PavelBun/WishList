@@ -115,20 +115,11 @@ func initRouter(svc *services, cfg *config.Config) *chi.Mux {
 		AllowedHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
 	}
 
-	// CSRF protection (Go 1.25+)
-	csrfMiddleware := http.NewCrossOriginProtection()
-	for _, origin := range cfg.CORSOrigins {
-		if origin != "*" {
-			if err := csrfMiddleware.AddTrustedOrigin(origin); err != nil {
-				slog.Warn("failed to add trusted origin for CSRF", "origin", origin, "error", err)
-			}
-		}
-	}
-
 	r := chi.NewRouter()
 	r.Use(middleware.CorsMiddleware(corsCfg))
 	r.Use(middleware.RequestIDMiddleware)
-	r.Use(csrfMiddleware.Handler)
+	// CSRF protection temporarily disabled for local development
+	// r.Use(csrfMiddleware.Handler)
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 

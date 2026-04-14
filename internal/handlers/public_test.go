@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,12 +8,12 @@ import (
 	"wishlist-api/internal/models"
 	"wishlist-api/internal/service"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
+//nolint:funlen
 func TestPublicHandler_GetWishlistByToken(t *testing.T) {
 	mockWishlistSvc := new(MockWishlistService)
 	mockItemSvc := new(MockItemService)
@@ -34,10 +33,13 @@ func TestPublicHandler_GetWishlistByToken(t *testing.T) {
 		mockWishlistSvc.On("GetByAccessToken", mock.Anything, token).Return(wishlist, nil).Once()
 		mockItemSvc.On("GetAllPublicByWishlistID", mock.Anything, wishlist.ID).Return(items, nil).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/public/wishlists/"+token.String(), nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("token", token.String())
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/public/wishlists/" + token.String(),
+			urlParams: map[string]string{
+				"token": token.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.GetWishlistByToken(w, req)
@@ -51,10 +53,13 @@ func TestPublicHandler_GetWishlistByToken(t *testing.T) {
 	})
 
 	t.Run("invalid token format", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/public/wishlists/not-a-uuid", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("token", "not-a-uuid")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/public/wishlists/not-a-uuid",
+			urlParams: map[string]string{
+				"token": "not-a-uuid",
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.GetWishlistByToken(w, req)
@@ -66,10 +71,13 @@ func TestPublicHandler_GetWishlistByToken(t *testing.T) {
 	t.Run("wishlist not found", func(t *testing.T) {
 		mockWishlistSvc.On("GetByAccessToken", mock.Anything, token).Return(nil, service.ErrNotFound).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/public/wishlists/"+token.String(), nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("token", token.String())
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/public/wishlists/" + token.String(),
+			urlParams: map[string]string{
+				"token": token.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.GetWishlistByToken(w, req)
@@ -92,11 +100,14 @@ func TestPublicHandler_BookItem(t *testing.T) {
 		mockWishlistSvc.On("GetByAccessToken", mock.Anything, token).Return(wishlist, nil).Once()
 		mockItemSvc.On("BookItem", mock.Anything, itemID, wishlistID).Return(nil).Once()
 
-		req := httptest.NewRequest(http.MethodPost, "/public/wishlists/"+token.String()+"/items/"+itemID.String()+"/book", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("token", token.String())
-		rctx.URLParams.Add("item_id", itemID.String())
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req := newTestRequest(t, testRequest{
+			method: http.MethodPost,
+			path:   "/public/wishlists/" + token.String() + "/items/" + itemID.String() + "/book",
+			urlParams: map[string]string{
+				"token":   token.String(),
+				"item_id": itemID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.BookItem(w, req)
@@ -108,11 +119,14 @@ func TestPublicHandler_BookItem(t *testing.T) {
 		mockWishlistSvc.On("GetByAccessToken", mock.Anything, token).Return(wishlist, nil).Once()
 		mockItemSvc.On("BookItem", mock.Anything, itemID, wishlistID).Return(service.ErrAlreadyBooked).Once()
 
-		req := httptest.NewRequest(http.MethodPost, "/public/wishlists/"+token.String()+"/items/"+itemID.String()+"/book", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("token", token.String())
-		rctx.URLParams.Add("item_id", itemID.String())
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req := newTestRequest(t, testRequest{
+			method: http.MethodPost,
+			path:   "/public/wishlists/" + token.String() + "/items/" + itemID.String() + "/book",
+			urlParams: map[string]string{
+				"token":   token.String(),
+				"item_id": itemID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.BookItem(w, req)

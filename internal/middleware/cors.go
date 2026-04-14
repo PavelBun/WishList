@@ -12,15 +12,6 @@ type CorsConfig struct {
 	AllowedHeaders []string
 }
 
-// DefaultCorsConfig returns a permissive development config.
-func DefaultCorsConfig() CorsConfig {
-	return CorsConfig{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
-	}
-}
-
 // CorsMiddleware adds CORS headers with configurable origins.
 func CorsMiddleware(cfg CorsConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

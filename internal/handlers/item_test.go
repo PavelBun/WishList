@@ -1,18 +1,14 @@
 package handlers
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"wishlist-api/internal/dto"
-	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/models"
 	"wishlist-api/internal/service"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -31,7 +27,6 @@ func TestItemHandler_Create(t *testing.T) {
 		ProductLink: "https://example.com",
 		Priority:    models.PriorityMust,
 	}
-	validBody, _ := json.Marshal(validReq)
 
 	t.Run("success", func(t *testing.T) {
 		expectedItem := &models.Item{
@@ -43,13 +38,15 @@ func TestItemHandler_Create(t *testing.T) {
 			validReq.Title, validReq.Description, validReq.ProductLink, validReq.Priority).
 			Return(expectedItem, nil).Once()
 
-		req := httptest.NewRequest(http.MethodPost, "/wishlists/"+wishlistID.String()+"/items", bytes.NewReader(validBody))
-		req.Header.Set("Content-Type", "application/json")
-		ctx := context.WithValue(req.Context(), middleware.UserIDKey, userID)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("wishlist_id", wishlistID.String())
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodPost,
+			path:   "/wishlists/" + wishlistID.String() + "/items",
+			body:   validReq,
+			userID: userID,
+			urlParams: map[string]string{
+				"wishlist_id": wishlistID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.Create(w, req)
@@ -63,8 +60,14 @@ func TestItemHandler_Create(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/wishlists/"+wishlistID.String()+"/items", bytes.NewReader(validBody))
-		req.Header.Set("Content-Type", "application/json")
+		req := newTestRequest(t, testRequest{
+			method: http.MethodPost,
+			path:   "/wishlists/" + wishlistID.String() + "/items",
+			body:   validReq,
+			urlParams: map[string]string{
+				"wishlist_id": wishlistID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 		handler.Create(w, req)
 
@@ -73,13 +76,15 @@ func TestItemHandler_Create(t *testing.T) {
 	})
 
 	t.Run("invalid wishlist ID", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/wishlists/invalid/items", bytes.NewReader(validBody))
-		req.Header.Set("Content-Type", "application/json")
-		ctx := context.WithValue(req.Context(), middleware.UserIDKey, userID)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("wishlist_id", "invalid")
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodPost,
+			path:   "/wishlists/invalid/items",
+			body:   validReq,
+			userID: userID,
+			urlParams: map[string]string{
+				"wishlist_id": "invalid",
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.Create(w, req)
@@ -104,12 +109,14 @@ func TestItemHandler_GetAll(t *testing.T) {
 		mockItemSvc.On("GetAllByWishlistID", mock.Anything, wishlistID, userID).
 			Return(expectedItems, nil).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/wishlists/"+wishlistID.String()+"/items", nil)
-		ctx := context.WithValue(req.Context(), middleware.UserIDKey, userID)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("wishlist_id", wishlistID.String())
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/wishlists/" + wishlistID.String() + "/items",
+			userID: userID,
+			urlParams: map[string]string{
+				"wishlist_id": wishlistID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.GetAll(w, req)
@@ -123,7 +130,13 @@ func TestItemHandler_GetAll(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/wishlists/"+wishlistID.String()+"/items", nil)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/wishlists/" + wishlistID.String() + "/items",
+			urlParams: map[string]string{
+				"wishlist_id": wishlistID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 		handler.GetAll(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -141,12 +154,14 @@ func TestItemHandler_GetByID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mockItemSvc.On("GetByID", mock.Anything, itemID, userID).Return(expectedItem, nil).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/items/"+itemID.String(), nil)
-		ctx := context.WithValue(req.Context(), middleware.UserIDKey, userID)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", itemID.String())
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/items/" + itemID.String(),
+			userID: userID,
+			urlParams: map[string]string{
+				"id": itemID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.GetByID(w, req)
@@ -161,12 +176,14 @@ func TestItemHandler_GetByID(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		mockItemSvc.On("GetByID", mock.Anything, itemID, userID).Return(nil, service.ErrNotFound).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/items/"+itemID.String(), nil)
-		ctx := context.WithValue(req.Context(), middleware.UserIDKey, userID)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", itemID.String())
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodGet,
+			path:   "/items/" + itemID.String(),
+			userID: userID,
+			urlParams: map[string]string{
+				"id": itemID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.GetByID(w, req)
@@ -185,12 +202,14 @@ func TestItemHandler_Delete(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mockItemSvc.On("Delete", mock.Anything, itemID, userID).Return(nil).Once()
 
-		req := httptest.NewRequest(http.MethodDelete, "/items/"+itemID.String(), nil)
-		ctx := context.WithValue(req.Context(), middleware.UserIDKey, userID)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", itemID.String())
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
+		req := newTestRequest(t, testRequest{
+			method: http.MethodDelete,
+			path:   "/items/" + itemID.String(),
+			userID: userID,
+			urlParams: map[string]string{
+				"id": itemID.String(),
+			},
+		})
 		w := httptest.NewRecorder()
 
 		handler.Delete(w, req)
