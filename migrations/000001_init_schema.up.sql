@@ -32,7 +32,9 @@ CREATE TABLE items (
                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Индексы
 CREATE INDEX idx_wishlists_user_id ON wishlists(user_id);
 CREATE INDEX idx_items_wishlist_id ON items(wishlist_id);
 CREATE INDEX idx_wishlists_access_token ON wishlists(access_token);
 CREATE INDEX idx_items_is_booked ON items(is_booked);
+CREATE UNIQUE INDEX idx_unique_item_name_per_wishlist ON items(wishlist_id, title);

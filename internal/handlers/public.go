@@ -25,8 +25,6 @@ func NewPublicHandler(wishlistService *service.WishlistService, itemService *ser
 // @Produce json
 // @Param token path string true "Access token (UUID)"
 // @Success 200 {object} models.Wishlist
-// @Failure 400 {string} string "Invalid token format"
-// @Failure 404 {string} string "Wishlist not found"
 // @Router /public/wishlists/{token} [get]
 func (h *PublicHandler) GetWishlistByToken(w http.ResponseWriter, r *http.Request) {
 	tokenStr := chi.URLParam(r, "token")
@@ -55,9 +53,6 @@ func (h *PublicHandler) GetWishlistByToken(w http.ResponseWriter, r *http.Reques
 // @Param token path string true "Access token (UUID)"
 // @Param item_id path string true "Item ID (UUID)"
 // @Success 204 "No Content"
-// @Failure 400 {string} string "Invalid token or item ID"
-// @Failure 404 {string} string "Wishlist or item not found"
-// @Failure 409 {string} string "Item already booked"
 // @Router /public/wishlists/{token}/items/{item_id}/book [post]
 func (h *PublicHandler) BookItem(w http.ResponseWriter, r *http.Request) {
 	tokenStr := chi.URLParam(r, "token")

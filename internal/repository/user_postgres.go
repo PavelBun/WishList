@@ -42,7 +42,7 @@ func (r *UserPostgres) GetByEmail(ctx context.Context, email string) (*models.Us
 	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get user by email: %w", err)
 	}

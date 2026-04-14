@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 	"wishlist-api/internal/models"
+	"wishlist-api/internal/repository"
 	"wishlist-api/internal/service"
 	"wishlist-api/pkg/hash"
 
@@ -20,6 +21,7 @@ type mockUserRepo struct {
 func (m *mockUserRepo) Create(ctx context.Context, email, passwordHash string) (*models.User, error) {
 	return m.createFunc(ctx, email, passwordHash)
 }
+
 func (m *mockUserRepo) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	return m.getByEmailFunc(ctx, email)
 }
@@ -32,7 +34,7 @@ func TestAuthService_Register(t *testing.T) {
 		},
 		createFunc: func(_ context.Context, email, _ string) (*models.User, error) {
 			return &models.User{
-				ID:        uuid.New(), // было 1
+				ID:        uuid.New(),
 				Email:     email,
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
@@ -52,7 +54,7 @@ func TestAuthService_Login(t *testing.T) {
 	repo := &mockUserRepo{
 		getByEmailFunc: func(_ context.Context, _ string) (*models.User, error) {
 			return &models.User{
-				ID:           uuid.New(), // было 1
+				ID:           uuid.New(),
 				Email:        "test@example.com",
 				PasswordHash: hashed,
 			}, nil
@@ -63,4 +65,18 @@ func TestAuthService_Login(t *testing.T) {
 	token, err := authService.Login(ctx, "test@example.com", "password123")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
+}
+
+func TestAuthService_Login_InvalidCredentials(t *testing.T) {
+	ctx := context.Background()
+	repo := &mockUserRepo{
+		getByEmailFunc: func(_ context.Context, _ string) (*models.User, error) {
+			return nil, repository.ErrNotFound
+		},
+	}
+	authService := service.NewAuthService(repo, "test-secret", 24)
+
+	_, err := authService.Login(ctx, "test@example.com", "wrongpass")
+	assert.Error(t, err)
+	assert.Equal(t, service.ErrInvalidCredentials, err)
 }

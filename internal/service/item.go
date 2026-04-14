@@ -31,10 +31,10 @@ func (s *ItemService) Create(ctx context.Context, wishlistID, userID uuid.UUID, 
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, wishlistID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get wishlist for item creation: %w", err)
-	}
-	if w == nil {
-		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
 		return nil, ErrForbidden
@@ -56,17 +56,17 @@ func (s *ItemService) Create(ctx context.Context, wishlistID, userID uuid.UUID, 
 func (s *ItemService) GetByID(ctx context.Context, id, userID uuid.UUID) (*models.Item, error) {
 	item, err := s.itemRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get item: %w", err)
-	}
-	if item == nil {
-		return nil, ErrNotFound
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get wishlist for item: %w", err)
-	}
-	if w == nil {
-		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
 		return nil, ErrForbidden
@@ -78,10 +78,10 @@ func (s *ItemService) GetByID(ctx context.Context, id, userID uuid.UUID) (*model
 func (s *ItemService) GetAllByWishlistID(ctx context.Context, wishlistID, userID uuid.UUID) ([]models.Item, error) {
 	w, err := s.wishlistRepo.GetByID(ctx, wishlistID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get wishlist for items listing: %w", err)
-	}
-	if w == nil {
-		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
 		return nil, ErrForbidden
@@ -89,6 +89,9 @@ func (s *ItemService) GetAllByWishlistID(ctx context.Context, wishlistID, userID
 	items, err := s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list items: %w", err)
+	}
+	if items == nil {
+		return []models.Item{}, nil
 	}
 	return items, nil
 }
@@ -98,6 +101,9 @@ func (s *ItemService) GetAllPublicByWishlistID(ctx context.Context, wishlistID u
 	items, err := s.itemRepo.GetAllByWishlistID(ctx, wishlistID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list public items: %w", err)
+	}
+	if items == nil {
+		return []models.Item{}, nil
 	}
 	return items, nil
 }
@@ -124,6 +130,9 @@ func (s *ItemService) Update(ctx context.Context, id, userID uuid.UUID, title *s
 		item.Priority = *priority
 	}
 	if err := s.itemRepo.Update(ctx, item); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to update item: %w", err)
 	}
 	return nil
@@ -136,6 +145,9 @@ func (s *ItemService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 		return err
 	}
 	if err := s.itemRepo.Delete(ctx, id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to delete item: %w", err)
 	}
 	return nil
@@ -145,10 +157,10 @@ func (s *ItemService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 func (s *ItemService) BookItem(ctx context.Context, id, wishlistID uuid.UUID) error {
 	item, err := s.itemRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to get item for booking: %w", err)
-	}
-	if item == nil {
-		return ErrNotFound
 	}
 	if item.WishlistID != wishlistID {
 		return ErrForbidden
@@ -156,6 +168,9 @@ func (s *ItemService) BookItem(ctx context.Context, id, wishlistID uuid.UUID) er
 	err = s.itemRepo.BookItem(ctx, id)
 	if errors.Is(err, repository.ErrAlreadyBooked) {
 		return ErrAlreadyBooked
+	}
+	if errors.Is(err, repository.ErrNotFound) {
+		return ErrNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("failed to book item: %w", err)
@@ -167,17 +182,17 @@ func (s *ItemService) BookItem(ctx context.Context, id, wishlistID uuid.UUID) er
 func (s *ItemService) getItemAndVerifyAccess(ctx context.Context, itemID, userID uuid.UUID) (*models.Item, *models.Wishlist, error) {
 	item, err := s.itemRepo.GetByID(ctx, itemID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, nil, ErrNotFound
+		}
 		return nil, nil, fmt.Errorf("failed to get item for access check: %w", err)
-	}
-	if item == nil {
-		return nil, nil, ErrNotFound
 	}
 	w, err := s.wishlistRepo.GetByID(ctx, item.WishlistID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, nil, ErrNotFound
+		}
 		return nil, nil, fmt.Errorf("failed to get wishlist for access check: %w", err)
-	}
-	if w == nil {
-		return nil, nil, ErrNotFound
 	}
 	if w.UserID != userID {
 		return nil, nil, ErrForbidden

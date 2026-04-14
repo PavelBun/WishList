@@ -43,7 +43,7 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, expiry
 // Register creates a new user account.
 func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
 	existing, err := s.userRepo.GetByEmail(ctx, email)
-	if err != nil {
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
 		return nil, fmt.Errorf("failed to check user existence: %w", err)
 	}
 	if existing != nil {
@@ -63,8 +63,11 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 // Login authenticates a user and returns a JWT token.
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, error) {
 	user, err := s.userRepo.GetByEmail(ctx, email)
-	if err != nil || user == nil {
-		return "", ErrInvalidCredentials
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return "", ErrInvalidCredentials
+		}
+		return "", fmt.Errorf("failed to get user: %w", err)
 	}
 	if !hash.Check(password, user.PasswordHash) {
 		return "", ErrInvalidCredentials

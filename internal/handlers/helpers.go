@@ -8,6 +8,7 @@ import (
 	"wishlist-api/internal/validator"
 )
 
+// writeJSON writes any JSON response.
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -17,19 +18,17 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	}
 }
 
+// writeJSONSuccess writes a 200 OK response with data.
 func writeJSONSuccess(w http.ResponseWriter, data any) {
 	writeJSON(w, http.StatusOK, data)
 }
 
+// writeJSONCreated writes a 201 Created response with data.
 func writeJSONCreated(w http.ResponseWriter, data any) {
 	writeJSON(w, http.StatusCreated, data)
 }
 
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	slog.Error("API error", "status", status, "message", message)
-	writeJSON(w, status, map[string]string{"error": message})
-}
-
+// decodeAndValidate decodes JSON from request body and validates the struct.
 func decodeAndValidate(r *http.Request, dst interface{}) error {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		return fmt.Errorf("invalid request body: %w", err)

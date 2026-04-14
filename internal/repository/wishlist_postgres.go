@@ -47,7 +47,7 @@ func (r *WishlistPostgres) GetByID(ctx context.Context, id uuid.UUID) (*models.W
 	).Scan(&w.ID, &w.UserID, &w.Title, &w.Description, &w.EventDate, &w.AccessToken, &w.CreatedAt, &w.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get wishlist by id: %w", err)
 	}
@@ -64,7 +64,7 @@ func (r *WishlistPostgres) GetByAccessToken(ctx context.Context, token uuid.UUID
 	).Scan(&w.ID, &w.UserID, &w.Title, &w.Description, &w.EventDate, &w.AccessToken, &w.CreatedAt, &w.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get wishlist by token: %w", err)
 	}
@@ -100,7 +100,7 @@ func (r *WishlistPostgres) GetAllByUser(ctx context.Context, userID uuid.UUID) (
 
 // Update modifies an existing wishlist.
 func (r *WishlistPostgres) Update(ctx context.Context, w *models.Wishlist) error {
-	_, err := r.pool.Exec(ctx,
+	cmdTag, err := r.pool.Exec(ctx,
 		`UPDATE wishlists SET title = $1, description = $2, event_date = $3, updated_at = NOW() 
          WHERE id = $4`,
 		w.Title, w.Description, w.EventDate, w.ID,
@@ -108,14 +108,20 @@ func (r *WishlistPostgres) Update(ctx context.Context, w *models.Wishlist) error
 	if err != nil {
 		return fmt.Errorf("update wishlist: %w", err)
 	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 
 // Delete removes a wishlist by ID.
 func (r *WishlistPostgres) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, "DELETE FROM wishlists WHERE id = $1", id)
+	cmdTag, err := r.pool.Exec(ctx, "DELETE FROM wishlists WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("delete wishlist: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

@@ -50,7 +50,7 @@ func (r *ItemPostgres) GetByID(ctx context.Context, id uuid.UUID) (*models.Item,
 		&priorityInt, &item.IsBooked, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get item by id: %w", err)
 	}
@@ -90,7 +90,7 @@ func (r *ItemPostgres) GetAllByWishlistID(ctx context.Context, wishlistID uuid.U
 
 // Update modifies an existing item.
 func (r *ItemPostgres) Update(ctx context.Context, item *models.Item) error {
-	_, err := r.pool.Exec(ctx,
+	cmdTag, err := r.pool.Exec(ctx,
 		`UPDATE items SET title = $1, description = $2, product_link = $3, priority = $4, updated_at = NOW() 
          WHERE id = $5`,
 		item.Title, item.Description, item.ProductLink, int(item.Priority), item.ID,
@@ -98,28 +98,42 @@ func (r *ItemPostgres) Update(ctx context.Context, item *models.Item) error {
 	if err != nil {
 		return fmt.Errorf("update item: %w", err)
 	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 
 // Delete removes an item by ID.
 func (r *ItemPostgres) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, "DELETE FROM items WHERE id = $1", id)
+	cmdTag, err := r.pool.Exec(ctx, "DELETE FROM items WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("delete item: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
 
 // BookItem marks an item as booked. Returns ErrAlreadyBooked if already booked.
 func (r *ItemPostgres) BookItem(ctx context.Context, id uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx,
+	cmdTag, err := r.pool.Exec(ctx,
 		"UPDATE items SET is_booked = TRUE WHERE id = $1 AND is_booked = FALSE",
 		id,
 	)
 	if err != nil {
 		return fmt.Errorf("book item exec: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if cmdTag.RowsAffected() == 0 {
+		var exists bool
+		checkErr := r.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM items WHERE id = $1)", id).Scan(&exists)
+		if checkErr != nil {
+			return fmt.Errorf("check item existence: %w", checkErr)
+		}
+		if !exists {
+			return ErrNotFound
+		}
 		return ErrAlreadyBooked
 	}
 	return nil

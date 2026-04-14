@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"wishlist-api/internal/dto"
 	"wishlist-api/internal/middleware"
+	"wishlist-api/internal/models"
 	"wishlist-api/internal/service"
 
 	"github.com/go-chi/chi/v5"
@@ -71,6 +72,9 @@ func (h *ItemHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeSafeError(w, r, err)
 		return
+	}
+	if items == nil {
+		items = []models.Item{}
 	}
 	writeJSONSuccess(w, items)
 }

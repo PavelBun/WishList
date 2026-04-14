@@ -109,11 +109,12 @@ func initServices(repos *repositories, cfg *config.Config) *services {
 // initRouter configures HTTP routes and middleware.
 func initRouter(svc *services) *chi.Mux {
 	authHandler := handlers.NewAuthHandler(svc.auth)
-	wishlistHandler := handlers.NewWishlistHandler(svc.wishlist)
+	wishlistHandler := handlers.NewWishlistHandler(svc.wishlist, svc.item)
 	itemHandler := handlers.NewItemHandler(svc.item)
 	publicHandler := handlers.NewPublicHandler(svc.wishlist, svc.item)
 
 	r := chi.NewRouter()
+	r.Use(middleware.CorsMiddleware)
 	r.Use(middleware.RequestIDMiddleware)
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)

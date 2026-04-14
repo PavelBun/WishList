@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"wishlist-api/internal/models"
@@ -22,7 +23,9 @@ func NewWishlistService(wishlistRepo repository.WishlistRepository) *WishlistSer
 
 // Create creates a new wishlist for the user.
 func (s *WishlistService) Create(ctx context.Context, userID uuid.UUID, title, description string, eventDate time.Time) (*models.Wishlist, error) {
-	if eventDate.Before(time.Now()) {
+	today := time.Now().Truncate(24 * time.Hour).UTC()
+	eventDateNormalized := eventDate.Truncate(24 * time.Hour).UTC()
+	if eventDateNormalized.Before(today) {
 		return nil, ErrInvalidInput
 	}
 	wishlist, err := s.wishlistRepo.Create(ctx, userID, title, description, eventDate)
@@ -36,10 +39,10 @@ func (s *WishlistService) Create(ctx context.Context, userID uuid.UUID, title, d
 func (s *WishlistService) GetByID(ctx context.Context, id, userID uuid.UUID) (*models.Wishlist, error) {
 	w, err := s.wishlistRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get wishlist: %w", err)
-	}
-	if w == nil {
-		return nil, ErrNotFound
 	}
 	if w.UserID != userID {
 		return nil, ErrForbidden
@@ -51,10 +54,10 @@ func (s *WishlistService) GetByID(ctx context.Context, id, userID uuid.UUID) (*m
 func (s *WishlistService) GetByAccessToken(ctx context.Context, token uuid.UUID) (*models.Wishlist, error) {
 	w, err := s.wishlistRepo.GetByAccessToken(ctx, token)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get wishlist by token: %w", err)
-	}
-	if w == nil {
-		return nil, ErrNotFound
 	}
 	return w, nil
 }
@@ -69,24 +72,38 @@ func (s *WishlistService) GetAllByUser(ctx context.Context, userID uuid.UUID) ([
 }
 
 // Update modifies an existing wishlist.
-func (s *WishlistService) Update(ctx context.Context, id, userID uuid.UUID, title, description string, eventDate time.Time) error {
+// Fields that are nil will not be updated.
+func (s *WishlistService) Update(ctx context.Context, id, userID uuid.UUID, title *string, description *string, eventDate *time.Time) error {
 	w, err := s.wishlistRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to get wishlist for update: %w", err)
-	}
-	if w == nil {
-		return ErrNotFound
 	}
 	if w.UserID != userID {
 		return ErrForbidden
 	}
-	if eventDate.Before(time.Now()) {
-		return ErrInvalidInput
+
+	if title != nil {
+		w.Title = *title
 	}
-	w.Title = title
-	w.Description = description
-	w.EventDate = eventDate
+	if description != nil {
+		w.Description = *description
+	}
+	if eventDate != nil {
+		today := time.Now().Truncate(24 * time.Hour).UTC()
+		eventDateNormalized := eventDate.Truncate(24 * time.Hour).UTC()
+		if eventDateNormalized.Before(today) {
+			return ErrInvalidInput
+		}
+		w.EventDate = *eventDate
+	}
+
 	if err := s.wishlistRepo.Update(ctx, w); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to update wishlist: %w", err)
 	}
 	return nil
@@ -96,15 +113,18 @@ func (s *WishlistService) Update(ctx context.Context, id, userID uuid.UUID, titl
 func (s *WishlistService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	w, err := s.wishlistRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to get wishlist for delete: %w", err)
-	}
-	if w == nil {
-		return ErrNotFound
 	}
 	if w.UserID != userID {
 		return ErrForbidden
 	}
 	if err := s.wishlistRepo.Delete(ctx, id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to delete wishlist: %w", err)
 	}
 	return nil

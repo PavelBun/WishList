@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wishlist API — Фронтенд</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #1e2a3a;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .flex-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .col {
+            flex: 1;
+            min-width: 250px;
+        }
+        input, textarea, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #1e6f3f;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: 0.2s;
+        }
+        button:hover {
+            background-color: #155a34;
+        }
+        .logout-btn {
+            background-color: #dc3545;
+            margin-left: 10px;
+        }
+        .logout-btn:hover {
+            background-color: #b02a37;
+        }
+        .error {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: -8px;
+            margin-bottom: 12px;
+        }
+        .success {
+            color: #1e6f3f;
+        }
+        .wishlist-item, .item-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            background: #fafafa;
+        }
+        .item-card {
+            background: #fff;
+            border-left: 4px solid #1e6f3f;
+        }
+        .flex-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .small-btn {
+            background-color: #0d6efd;
+            padding: 6px 12px;
+            font-size: 12px;
+            width: auto;
+        }
+        .danger-btn {
+            background-color: #dc3545;
+        }
+        .danger-btn:hover {
+            background-color: #b02a37;
+        }
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+        .token-badge {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+        hr {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Wishlist Manager</h1>
+
+    <!-- Состояние: не авторизован -->
+    <div id="authPanel" class="card">
+        <h2>Авторизация</h2>
+        <div class="flex-row">
+            <div class="col">
+                <h3>Регистрация</h3>
+                <input type="email" id="regEmail" placeholder="Email">
+                <input type="password" id="regPassword" placeholder="Пароль (мин. 8 символов)">
+                <button id="registerBtn">Зарегистрироваться</button>
+                <div id="regError" class="error"></div>
+            </div>
+            <div class="col">
+                <h3>Вход</h3>
+                <input type="email" id="loginEmail" placeholder="Email">
+                <input type="password" id="loginPassword" placeholder="Пароль">
+                <button id="loginBtn">Войти</button>
+                <div id="loginError" class="error"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Состояние: авторизован -->
+    <div id="userPanel" style="display: none;">
+        <nav>
+            <span>👤 <span id="userEmail"></span></span>
+            <button id="logoutBtn" class="logout-btn">Выйти</button>
+        </nav>
+
+        <div class="flex-row">
+            <div class="col">
+                <div class="card">
+                    <h3>➕ Создать вишлист</h3>
+                    <input type="text" id="wlTitle" placeholder="Название события">
+                    <textarea id="wlDesc" rows="2" placeholder="Описание (необязательно)"></textarea>
+                    <input type="date" id="wlDate">
+                    <button id="createWishlistBtn">Создать</button>
+                    <div id="createWlError" class="error"></div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card">
+                    <h3>📋 Публичный доступ</h3>
+                    <input type="text" id="publicTokenInput" placeholder="Введите публичный токен">
+                    <button id="loadPublicWishlistBtn">Посмотреть вишлист</button>
+                    <div id="publicResult"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Мои вишлисты</h2>
+            <div id="wishlistsList">Загрузка...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_BASE = 'http://localhost:8080';
+    let currentToken = null;
+
+    // ========== Helpers ==========
+    async function apiRequest(endpoint, method, body = null, auth = false) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (auth && currentToken) {
+            headers['Authorization'] = `Bearer ${currentToken}`;
+        }
+        const options = { method, headers };
+        if (body) options.body = JSON.stringify(body);
+        const resp = await fetch(`${API_BASE}${endpoint}`, options);
+        let data = null;
+        const contentType = resp.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await resp.json();
+        }
+        return { ok: resp.ok, status: resp.status, data };
+    }
+
+    function showError(elementId, message) {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerText = message;
+            setTimeout(() => { el.innerText = ''; }, 3000);
+        }
+    }
+
+    // Сохранение сессии
+    function setAuth(token, email) {
+        currentToken = token;
+        localStorage.setItem('wishlist_token', token);
+        localStorage.setItem('wishlist_user', email);
+        document.getElementById('authPanel').style.display = 'none';
+        document.getElementById('userPanel').style.display = 'block';
+        document.getElementById('userEmail').innerText = email;
+        loadWishlists();
+    }
+
+    function clearAuth() {
+        currentToken = null;
+        localStorage.removeItem('wishlist_token');
+        localStorage.removeItem('wishlist_user');
+        document.getElementById('authPanel').style.display = 'block';
+        document.getElementById('userPanel').style.display = 'none';
+        document.getElementById('wishlistsList').innerHTML = '';
+    }
+
+    // Загрузка списка вишлистов
+    async function loadWishlists() {
+        const container = document.getElementById('wishlistsList');
+        container.innerHTML = 'Загрузка...';
+        const { ok, data } = await apiRequest('/wishlists', 'GET', null, true);
+        if (!ok) {
+            container.innerHTML = '<div class="error">Не удалось загрузить вишлисты</div>';
+            return;
+        }
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p>У вас пока нет вишлистов. Создайте первый!</p>';
+            return;
+        }
+        container.innerHTML = '';
+        for (const wl of data) {
+            const wlDiv = document.createElement('div');
+            wlDiv.className = 'wishlist-item';
+            wlDiv.innerHTML = `
+                <strong>${escapeHtml(wl.title)}</strong> (${new Date(wl.event_date).toLocaleDateString()})<br>
+                <small>${escapeHtml(wl.description || '')}</small><br>
+                <div class="token-badge">Публичный токен: ${wl.access_token}</div>
+                <button class="small-btn" data-id="${wl.id}" data-token="${wl.access_token}" data-title="${escapeHtml(wl.title)}" onclick="viewWishlistDetails('${wl.id}', '${wl.access_token}', '${escapeHtml(wl.title)}')">Детали / Подарки</button>
+                <button class="small-btn danger-btn" data-id="${wl.id}" onclick="deleteWishlist('${wl.id}')">Удалить</button>
+            `;
+            container.appendChild(wlDiv);
+        }
+    }
+
+    window.viewWishlistDetails = async function(wishlistId, accessToken, title) {
+        // Загружаем детали вишлиста
+        const { ok, data: wishlist } = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
+        if (!ok) {
+            alert('Не удалось загрузить вишлист');
+            return;
+        }
+        // Загружаем предметы
+        const itemsRes = await apiRequest(`/wishlists/${wishlistId}/items`, 'GET', null, true);
+        const items = (itemsRes.ok && itemsRes.data) ? itemsRes.data : [];
+
+        let itemsHtml = '<h4>Подарки:</h4>';
+        if (items.length === 0) {
+            itemsHtml += '<p>Пока нет подарков</p>';
+        } else {
+            for (const item of items) {
+                itemsHtml += `
+            <div class="item-card">
+                <strong>${escapeHtml(item.title)}</strong> (приоритет: ${item.priority})<br>
+                ${item.description ? escapeHtml(item.description) + '<br>' : ''}
+                ${item.product_link ? `<a href="${item.product_link}" target="_blank">Ссылка</a><br>` : ''}
+                Статус: ${item.is_booked ? '🔴 Забронирован' : '🟢 Свободен'}<br>
+                <button class="small-btn" onclick="deleteItem('${item.id}', '${wishlistId}')">Удалить</button>
+            </div>
+        `;
+            }
+        }
+        const modalHtml = `
+            <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000;" id="modal">
+                <div style="background:white; max-width:500px; width:90%; border-radius:12px; padding:20px; max-height:80%; overflow:auto;">
+                    <h3>${escapeHtml(title)}</h3>
+                    <p>Дата: ${new Date(wishlist.event_date).toLocaleDateString()}</p>
+                    <p>Описание: ${escapeHtml(wishlist.description || '')}</p>
+                    <hr>
+                    <h4>➕ Добавить подарок</h4>
+                    <input type="text" id="itemTitle" placeholder="Название" style="width:100%">
+                    <textarea id="itemDesc" placeholder="Описание" rows="2" style="width:100%"></textarea>
+                    <input type="text" id="itemLink" placeholder="Ссылка на товар (опционально)" style="width:100%">
+                    <select id="itemPriority" style="width:100%">
+                        <option value="1">1 — низкий</option>
+                        <option value="2">2</option>
+                        <option value="3">3 — средний</option>
+                        <option value="4">4</option>
+                        <option value="5">5 — высший</option>
+                    </select>
+                    <button id="addItemBtn" data-wishlist="${wishlistId}">➕ Добавить</button>
+                    <hr>
+                    ${itemsHtml}
+                    <button onclick="closeModal()">Закрыть</button>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        document.getElementById('addItemBtn').addEventListener('click', async () => {
+            const title = document.getElementById('itemTitle').value.trim();
+            if (!title) { alert('Название обязательно'); return; }
+            const priority = parseInt(document.getElementById('itemPriority').value, 10);
+            const payload = {
+                title,
+                description: document.getElementById('itemDesc').value,
+                product_link: document.getElementById('itemLink').value,
+                priority
+            };
+            const { ok, data: newItem } = await apiRequest(`/wishlists/${wishlistId}/items`, 'POST', payload, true);
+            if (ok) {
+                alert('Подарок добавлен!');
+                closeModal();
+                viewWishlistDetails(wishlistId, accessToken, title);
+            } else {
+                alert('Ошибка добавления');
+            }
+        });
+    };
+
+    window.deleteWishlist = async function(wishlistId) {
+        if (!confirm('Удалить вишлист? Все подарки тоже удалятся.')) return;
+        const { ok } = await apiRequest(`/wishlists/${wishlistId}`, 'DELETE', null, true);
+        if (ok) {
+            loadWishlists();
+        } else {
+            alert('Ошибка удаления');
+        }
+    };
+
+    window.deleteItem = async function(itemId, wishlistId) {
+        if (!confirm('Удалить подарок?')) return;
+        const { ok } = await apiRequest(`/items/${itemId}`, 'DELETE', null, true);
+        if (ok) {
+            // обновим модальное окно — перезагрузим детали
+            const { data: wishlist } = await apiRequest(`/wishlists/${wishlistId}`, 'GET', null, true);
+            if (wishlist) {
+                closeModal();
+                viewWishlistDetails(wishlistId, wishlist.access_token, wishlist.title);
+            } else {
+                loadWishlists();
+                closeModal();
+            }
+        } else {
+            alert('Ошибка удаления');
+        }
+    };
+
+    window.closeModal = function() {
+        const modal = document.getElementById('modal');
+        if (modal) modal.remove();
+    };
+
+    // Публичный просмотр и бронирование
+    document.getElementById('loadPublicWishlistBtn').addEventListener('click', async () => {
+        const token = document.getElementById('publicTokenInput').value.trim();
+        if (!token) { alert('Введите публичный токен'); return; }
+        const { ok, data: wishlist } = await apiRequest(`/public/wishlists/${token}`, 'GET');
+        if (!ok) {
+            document.getElementById('publicResult').innerHTML = '<div class="error">Вишлист не найден</div>';
+            return;
+        }
+        const items = wishlist.items || [];
+        let itemsHtml = '<h4>Подарки:</h4><ul>';
+        for (const item of items) {
+            itemsHtml += `<li><strong>${escapeHtml(item.title)}</strong> (приоритет: ${item.priority})
+                ${item.is_booked ? '🔴 Забронирован' : `🟢 <button class="small-btn" onclick="bookItem('${token}', '${item.id}')">Забронировать</button>`}
+                </li>`;
+        }
+        itemsHtml += '</ul>';
+        document.getElementById('publicResult').innerHTML = `
+            <div class="card">
+                <h3>${escapeHtml(wishlist.title)}</h3>
+                <p>${escapeHtml(wishlist.description || '')}</p>
+                <p>Дата: ${new Date(wishlist.event_date).toLocaleDateString()}</p>
+                ${itemsHtml}
+            </div>
+        `;
+    });
+
+    window.bookItem = async function(publicToken, itemId) {
+        const { ok, status } = await apiRequest(`/public/wishlists/${publicToken}/items/${itemId}/book`, 'POST');
+        if (status === 204) {
+            alert('Подарок успешно забронирован!');
+            // обновить отображение
+            document.getElementById('loadPublicWishlistBtn').click();
+        } else if (status === 409) {
+            alert('Подарок уже забронирован кем-то другим');
+        } else {
+            alert('Ошибка бронирования');
+        }
+    };
+
+    // Регистрация
+    document.getElementById('registerBtn').addEventListener('click', async () => {
+        const email = document.getElementById('regEmail').value.trim();
+        const password = document.getElementById('regPassword').value;
+        const { ok, data } = await apiRequest('/auth/register', 'POST', { email, password });
+        if (ok) {
+            alert('Регистрация успешна, теперь войдите');
+            document.getElementById('regEmail').value = '';
+            document.getElementById('regPassword').value = '';
+        } else {
+            const msg = data?.error || 'Ошибка регистрации';
+            showError('regError', msg);
+        }
+    });
+
+    // Логин
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const { ok, data } = await apiRequest('/auth/login', 'POST', { email, password });
+        if (ok && data.token) {
+            setAuth(data.token, email);
+        } else {
+            const msg = data?.error || 'Неверные учетные данные';
+            showError('loginError', msg);
+        }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', clearAuth);
+
+    // Создание вишлиста
+    document.getElementById('createWishlistBtn').addEventListener('click', async () => {
+        const title = document.getElementById('wlTitle').value.trim();
+        const description = document.getElementById('wlDesc').value;
+        let event_date = document.getElementById('wlDate').value;
+        if (!title) { showError('createWlError', 'Название обязательно'); return; }
+        if (!event_date) {
+            event_date = new Date(Date.now() + 86400000 * 7).toISOString().slice(0,10);
+        }
+        const { ok, data } = await apiRequest('/wishlists', 'POST', { title, description, event_date }, true);
+        if (ok) {
+            document.getElementById('wlTitle').value = '';
+            document.getElementById('wlDesc').value = '';
+            document.getElementById('wlDate').value = '';
+            loadWishlists();
+        } else {
+            showError('createWlError', data?.error || 'Ошибка создания');
+        }
+    });
+
+    // Восстановление сессии
+    const savedToken = localStorage.getItem('wishlist_token');
+    const savedUser = localStorage.getItem('wishlist_user');
+    if (savedToken && savedUser) {
+        currentToken = savedToken;
+        setAuth(savedToken, savedUser);
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+            return c;
+        });
+    }
+</script>
+</body>
+</html>

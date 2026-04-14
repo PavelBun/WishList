@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 	"wishlist-api/internal/dto"
 	"wishlist-api/internal/middleware"
 	"wishlist-api/internal/service"
@@ -13,11 +14,15 @@ import (
 // WishlistHandler handles wishlist-related endpoints.
 type WishlistHandler struct {
 	wishlistService *service.WishlistService
+	itemService     *service.ItemService
 }
 
 // NewWishlistHandler creates a new WishlistHandler instance.
-func NewWishlistHandler(wishlistService *service.WishlistService) *WishlistHandler {
-	return &WishlistHandler{wishlistService: wishlistService}
+func NewWishlistHandler(wishlistService *service.WishlistService, itemService *service.ItemService) *WishlistHandler {
+	return &WishlistHandler{
+		wishlistService: wishlistService,
+		itemService:     itemService,
+	}
 }
 
 // Create godoc
@@ -28,8 +33,6 @@ func NewWishlistHandler(wishlistService *service.WishlistService) *WishlistHandl
 // @Produce json
 // @Param request body dto.CreateWishlistRequest true "Wishlist data"
 // @Success 201 {object} models.Wishlist
-// @Failure 400 {string} string
-// @Failure 401 {string} string
 // @Router /wishlists [post]
 func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
@@ -38,7 +41,14 @@ func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	wishlist, err := h.wishlistService.Create(r.Context(), userID, req.Title, req.Description, req.EventDate)
+
+	eventDate, err := time.Parse("2006-01-02", req.EventDate)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "event_date must be in YYYY-MM-DD format")
+		return
+	}
+
+	wishlist, err := h.wishlistService.Create(r.Context(), userID, req.Title, req.Description, eventDate)
 	if err != nil {
 		writeSafeError(w, r, err)
 		return
@@ -52,7 +62,6 @@ func (h *WishlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.Wishlist
-// @Failure 401 {string} string
 // @Router /wishlists [get]
 func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
@@ -65,13 +74,12 @@ func (h *WishlistHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetByID godoc
-// @Summary Get wishlist by ID
+// @Summary Get wishlist by ID with items
 // @Tags wishlists
 // @Security BearerAuth
 // @Produce json
-// @Param id path int true "Wishlist ID"
+// @Param id path string true "Wishlist ID (UUID)"
 // @Success 200 {object} models.Wishlist
-// @Failure 404 {string} string
 // @Router /wishlists/{id} [get]
 func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
@@ -86,6 +94,13 @@ func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		writeSafeError(w, r, err)
 		return
 	}
+	// Загружаем предметы
+	items, err := h.itemService.GetAllByWishlistID(r.Context(), id, userID)
+	if err != nil {
+		writeSafeError(w, r, err)
+		return
+	}
+	wishlist.Items = items
 	writeJSONSuccess(w, wishlist)
 }
 
@@ -95,10 +110,9 @@ func (h *WishlistHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path int true "Wishlist ID"
+// @Param id path string true "Wishlist ID (UUID)"
 // @Param request body dto.UpdateWishlistRequest true "Updated fields"
-// @Success 200 {string} string "OK"
-// @Failure 400,404,401 {string} string
+// @Success 200 {object} models.Wishlist
 // @Router /wishlists/{id} [put]
 func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
@@ -113,11 +127,27 @@ func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.wishlistService.Update(r.Context(), id, userID, req.Title, req.Description, req.EventDate); err != nil {
+
+	var eventDatePtr *time.Time
+	if req.EventDate != nil {
+		parsed, err := time.Parse("2006-01-02", *req.EventDate)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "event_date must be in YYYY-MM-DD format")
+			return
+		}
+		eventDatePtr = &parsed
+	}
+
+	if err := h.wishlistService.Update(r.Context(), id, userID, req.Title, req.Description, eventDatePtr); err != nil {
 		writeSafeError(w, r, err)
 		return
 	}
-	updated, _ := h.wishlistService.GetByID(r.Context(), id, userID)
+
+	updated, err := h.wishlistService.GetByID(r.Context(), id, userID)
+	if err != nil {
+		writeJSONSuccess(w, map[string]string{"status": "updated"})
+		return
+	}
 	writeJSONSuccess(w, updated)
 }
 
@@ -125,9 +155,8 @@ func (h *WishlistHandler) Update(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete wishlist
 // @Tags wishlists
 // @Security BearerAuth
-// @Param id path int true "Wishlist ID"
-// @Success 200 {string} string "OK"
-// @Failure 400,404,401 {string} string
+// @Param id path string true "Wishlist ID (UUID)"
+// @Success 204 "No Content"
 // @Router /wishlists/{id} [delete]
 func (h *WishlistHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
